@@ -1,42 +1,85 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono;
 use fennec_core::{
     command::{Capability, CommandPreview, CommandResult, PreviewAction},
     error::FennecError,
 };
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
-use tokio::fs;
+use std::path::PathBuf;
 use uuid::Uuid;
 
+use crate::file_ops::{EditStrategy, FileEditRequest, FileOperations, FileOperationsConfig};
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
 
-/// Arguments for the edit command
+/// Arguments for the edit command - enhanced with new edit strategies
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditArgs {
     /// Path to the file to edit
     pub file_path: String,
-    /// Content to write to the file
-    pub content: Option<String>,
-    /// Line number to start editing from (1-based)
-    pub line_start: Option<usize>,
-    /// Line number to end editing at (1-based, inclusive)
-    pub line_end: Option<usize>,
-    /// Text to search for and replace
-    pub search: Option<String>,
-    /// Replacement text
-    pub replace: Option<String>,
+    /// Edit strategy to apply
+    pub strategy: EditStrategyArgs,
     /// Whether to create the file if it doesn't exist
     pub create_if_missing: Option<bool>,
     /// Whether to make a backup before editing
     pub backup: Option<bool>,
 }
 
-/// Edit command for modifying files
+/// Edit strategy arguments that map to the file_ops EditStrategy enum
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data")]
+pub enum EditStrategyArgs {
+    /// Replace entire file content
+    Replace { content: String },
+    /// Append content to the end of the file
+    Append { content: String },
+    /// Prepend content to the beginning of the file
+    Prepend { content: String },
+    /// Insert content at a specific line number (1-based)
+    InsertAtLine { line_number: usize, content: String },
+    /// Search and replace text within the file
+    SearchReplace { search: String, replace: String },
+    /// Replace content in a specific line range (1-based, inclusive)
+    LineRange {
+        start: usize,
+        end: Option<usize>,
+        content: String,
+    },
+}
+
+impl From<EditStrategyArgs> for EditStrategy {
+    fn from(args: EditStrategyArgs) -> Self {
+        match args {
+            EditStrategyArgs::Replace { content } => EditStrategy::Replace { content },
+            EditStrategyArgs::Append { content } => EditStrategy::Append { content },
+            EditStrategyArgs::Prepend { content } => EditStrategy::Prepend { content },
+            EditStrategyArgs::InsertAtLine {
+                line_number,
+                content,
+            } => EditStrategy::InsertAtLine {
+                line_number,
+                content,
+            },
+            EditStrategyArgs::SearchReplace { search, replace } => {
+                EditStrategy::SearchReplace { search, replace }
+            }
+            EditStrategyArgs::LineRange {
+                start,
+                end,
+                content,
+            } => EditStrategy::LineRange {
+                start,
+                end,
+                content,
+            },
+        }
+    }
+}
+
+/// Enhanced edit command using the new file operations module
 pub struct EditCommand {
     descriptor: CommandDescriptor,
+    file_ops: FileOperations,
 }
 
 impl EditCommand {
@@ -44,107 +87,113 @@ impl EditCommand {
         Self {
             descriptor: CommandDescriptor {
                 name: "edit".to_string(),
-                description: "Edit files with various modification strategies".to_string(),
-                version: "1.0.0".to_string(),
+                description: "Edit files with various modification strategies and safety features"
+                    .to_string(),
+                version: "2.0.0".to_string(),
                 author: Some("Fennec Core".to_string()),
                 capabilities_required: vec![Capability::ReadFile, Capability::WriteFile],
                 sandbox_level_required: SandboxLevel::WorkspaceWrite,
                 supports_preview: true,
                 supports_dry_run: true,
             },
+            file_ops: FileOperations::new(FileOperationsConfig {
+                backup_directory: None,
+                max_file_size: 100 * 1024 * 1024, // 100MB
+                detect_encoding: true,
+                atomic_writes: true,
+            }),
         }
     }
 
-    /// Check if the file path is safe to edit
-    fn validate_file_path(&self, file_path: &str, context: &CommandContext) -> Result<()> {
-        let path = Path::new(file_path);
+    pub fn with_config(config: FileOperationsConfig) -> Self {
+        Self {
+            descriptor: CommandDescriptor {
+                name: "edit".to_string(),
+                description: "Edit files with various modification strategies and safety features"
+                    .to_string(),
+                version: "2.0.0".to_string(),
+                author: Some("Fennec Core".to_string()),
+                capabilities_required: vec![Capability::ReadFile, Capability::WriteFile],
+                sandbox_level_required: SandboxLevel::WorkspaceWrite,
+                supports_preview: true,
+                supports_dry_run: true,
+            },
+            file_ops: FileOperations::new(config),
+        }
+    }
 
-        // Convert to absolute path
-        let abs_path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::env::current_dir()?.join(path)
-        };
+    /// Generate a preview with actual diff content
+    async fn generate_preview(
+        &self,
+        args: &EditArgs,
+        context: &CommandContext,
+    ) -> Result<CommandPreview> {
+        let file_path = PathBuf::from(&args.file_path);
 
-        // Security checks based on sandbox level
-        match context.sandbox_level {
-            SandboxLevel::ReadOnly => {
-                return Err(FennecError::Security {
-                    message: "Cannot edit files in read-only mode".to_string(),
-                }
-                .into());
-            }
-            SandboxLevel::WorkspaceWrite => {
-                // Only allow editing within the current workspace
-                let current_dir = std::env::current_dir()?;
-                if !abs_path.starts_with(&current_dir) {
-                    return Err(FennecError::Security {
-                        message: "Cannot edit files outside the current workspace".to_string(),
+        // Validate file path first
+        let validated_path = self
+            .file_ops
+            .validate_file_path(
+                &file_path,
+                &context.sandbox_level,
+                context.workspace_path.as_deref(),
+            )
+            .await?;
+
+        let mut actions = vec![PreviewAction::ReadFile {
+            path: validated_path.to_string_lossy().to_string(),
+        }];
+
+        // Try to generate preview content by reading current file and applying strategy
+        let preview_description = if validated_path.exists() {
+            match self.file_ops.safe_read_file(&validated_path).await {
+                Ok(original_content) => {
+                    let strategy: EditStrategy = args.strategy.clone().into();
+                    match self
+                        .file_ops
+                        .apply_edit_strategy(&original_content, &strategy)
+                    {
+                        Ok(new_content) => {
+                            // Generate diff for the preview
+                            match self.file_ops.generate_diff(&original_content, &new_content) {
+                                Ok(diff) => {
+                                    actions.push(PreviewAction::WriteFile {
+                                        path: validated_path.to_string_lossy().to_string(),
+                                        content: if diff.len() > 1000 {
+                                            format!(
+                                                "{}... (diff truncated, {} total characters)",
+                                                &diff[..1000],
+                                                diff.len()
+                                            )
+                                        } else {
+                                            diff
+                                        },
+                                    });
+                                    format!(
+                                        "Edit file: {} with strategy: {:?}",
+                                        args.file_path, args.strategy
+                                    )
+                                }
+                                Err(_) => format!(
+                                    "Edit file: {} (diff generation failed)",
+                                    args.file_path
+                                ),
+                            }
+                        }
+                        Err(e) => format!("Edit file: {} (preview failed: {})", args.file_path, e),
                     }
-                    .into());
                 }
+                Err(_) => format!(
+                    "Edit file: {} (cannot read current content)",
+                    args.file_path
+                ),
             }
-            SandboxLevel::FullAccess => {
-                // Full access - no restrictions
-            }
-        }
-
-        // Prevent editing sensitive system files
-        let dangerous_paths = [
-            "/etc",
-            "/usr",
-            "/sys",
-            "/proc",
-            "/dev",
-            "C:\\Windows",
-            "C:\\Program Files",
-            "C:\\System32",
-        ];
-
-        for dangerous in &dangerous_paths {
-            if abs_path.starts_with(dangerous) {
-                return Err(FennecError::Security {
-                    message: format!("Cannot edit files in system directory: {}", dangerous),
-                }
-                .into());
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Perform the file edit operation
-    async fn perform_edit(&self, args: &EditArgs, context: &CommandContext) -> Result<String> {
-        self.validate_file_path(&args.file_path, context)?;
-
-        let path = Path::new(&args.file_path);
-        let mut result_messages = Vec::new();
-
-        // Check for cancellation
-        if context.cancellation_token.is_cancelled() {
-            return Err(FennecError::Command {
-                message: "Edit operation was cancelled".to_string(),
-            }
-            .into());
-        }
-
-        // Read existing content if file exists
-        let existing_content = if path.exists() {
-            fs::read_to_string(path)
-                .await
-                .map_err(|e| FennecError::Command {
-                    message: format!("Failed to read file {}: {}", args.file_path, e),
-                })?
         } else if args.create_if_missing.unwrap_or(false) {
-            // Create parent directories if needed
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)
-                    .await
-                    .map_err(|e| FennecError::Command {
-                        message: format!("Failed to create directory {}: {}", parent.display(), e),
-                    })?;
-            }
-            String::new()
+            actions.push(PreviewAction::WriteFile {
+                path: validated_path.to_string_lossy().to_string(),
+                content: "New file will be created".to_string(),
+            });
+            format!("Create new file: {}", args.file_path)
         } else {
             return Err(FennecError::Command {
                 message: format!(
@@ -155,84 +204,97 @@ impl EditCommand {
             .into());
         };
 
-        // Create backup if requested
-        if args.backup.unwrap_or(false) && path.exists() {
-            let backup_path = format!(
-                "{}.backup.{}",
-                args.file_path,
-                chrono::Utc::now().timestamp()
-            );
-            if !context.dry_run {
-                fs::copy(path, &backup_path)
-                    .await
-                    .map_err(|e| FennecError::Command {
-                        message: format!("Failed to create backup: {}", e),
-                    })?;
+        Ok(CommandPreview {
+            command_id: Uuid::new_v4(),
+            description: preview_description,
+            actions,
+            requires_approval: true, // Always require approval for file edits
+        })
+    }
+
+    /// Perform the file edit operation using the new file operations module
+    async fn perform_edit(&self, args: &EditArgs, context: &CommandContext) -> Result<String> {
+        // Check for cancellation
+        if context.cancellation_token.is_cancelled() {
+            return Err(FennecError::Command {
+                message: "Edit operation was cancelled".to_string(),
             }
-            result_messages.push(format!("Created backup: {}", backup_path));
+            .into());
         }
 
-        let new_content = if let Some(content) = &args.content {
-            // Replace entire file content
-            result_messages.push("Replaced entire file content".to_string());
-            content.clone()
-        } else if let (Some(search), Some(replace)) = (&args.search, &args.replace) {
-            // Search and replace
-            let new_content = existing_content.replace(search, replace);
-            let count = existing_content.matches(search).count();
-            result_messages.push(format!("Replaced {} occurrences of '{}'", count, search));
-            new_content
-        } else if let (Some(line_start), line_end) = (args.line_start, args.line_end) {
-            // Line-based editing
-            let lines: Vec<&str> = existing_content.lines().collect();
-            let start_idx = line_start.saturating_sub(1); // Convert to 0-based
-            let end_idx = line_end.unwrap_or(line_start).saturating_sub(1);
+        let file_path = PathBuf::from(&args.file_path);
+        let strategy: EditStrategy = args.strategy.clone().into();
 
-            if start_idx >= lines.len() {
+        let request = FileEditRequest {
+            path: file_path,
+            strategy,
+            create_backup: args.backup.unwrap_or(false),
+            create_if_missing: args.create_if_missing.unwrap_or(false),
+        };
+
+        if context.dry_run {
+            // For dry run, just validate and show what would happen
+            let validated_path = self
+                .file_ops
+                .validate_file_path(
+                    &request.path,
+                    &context.sandbox_level,
+                    context.workspace_path.as_deref(),
+                )
+                .await?;
+
+            let original_content = if validated_path.exists() {
+                self.file_ops.safe_read_file(&validated_path).await?
+            } else if request.create_if_missing {
+                String::new()
+            } else {
                 return Err(FennecError::Command {
                     message: format!(
-                        "Line {} is beyond file length ({})",
-                        line_start,
-                        lines.len()
+                        "File {} does not exist and create_if_missing is false",
+                        validated_path.display()
                     ),
                 }
                 .into());
-            }
+            };
 
-            let replacement = args.content.as_deref().unwrap_or("");
-            let mut new_lines = lines[..start_idx].to_vec();
-            new_lines.push(replacement);
-            new_lines.extend_from_slice(&lines[(end_idx + 1)..]);
+            let new_content = self
+                .file_ops
+                .apply_edit_strategy(&original_content, &request.strategy)?;
+            let diff = self
+                .file_ops
+                .generate_diff(&original_content, &new_content)?;
 
-            result_messages.push(format!("Edited lines {} to {}", line_start, end_idx + 1));
-            new_lines.join("\n")
-        } else {
-            return Err(FennecError::Command {
-                message: "Must specify either content, search/replace, or line range".to_string(),
-            }
-            .into());
-        };
-
-        // Write the new content
-        if !context.dry_run {
-            fs::write(path, &new_content)
-                .await
-                .map_err(|e| FennecError::Command {
-                    message: format!("Failed to write file {}: {}", args.file_path, e),
-                })?;
+            return Ok(format!(
+                "DRY RUN: Would edit file: {}\n\nDiff preview:\n{}",
+                validated_path.display(),
+                diff
+            ));
         }
 
-        result_messages.push(format!(
-            "Successfully {} file: {}",
-            if context.dry_run {
-                "would edit"
-            } else {
-                "edited"
-            },
-            args.file_path
-        ));
+        // Perform the actual edit
+        let result = self
+            .file_ops
+            .edit_file(
+                request,
+                &context.sandbox_level,
+                context.workspace_path.as_deref(),
+            )
+            .await?;
 
-        Ok(result_messages.join("\n"))
+        let mut messages = vec![
+            format!("Successfully edited file: {}", args.file_path),
+            format!("Bytes written: {}", result.bytes_written),
+        ];
+
+        if let Some(backup_path) = result.backup_path {
+            messages.push(format!("Created backup: {}", backup_path.display()));
+        }
+
+        if !result.diff.is_empty() {
+            messages.push(format!("Changes made:\n{}", result.diff));
+        }
+
+        Ok(messages.join("\n"))
     }
 }
 
@@ -252,33 +314,7 @@ impl CommandExecutor for EditCommand {
                 message: format!("Invalid edit arguments: {}", e),
             })?;
 
-        self.validate_file_path(&args.file_path, context)?;
-
-        let mut actions = vec![PreviewAction::ReadFile {
-            path: args.file_path.clone(),
-        }];
-
-        if let Some(content) = &args.content {
-            actions.push(PreviewAction::WriteFile {
-                path: args.file_path.clone(),
-                content: if content.len() > 200 {
-                    format!(
-                        "{}... ({} characters total)",
-                        &content[..200],
-                        content.len()
-                    )
-                } else {
-                    content.clone()
-                },
-            });
-        }
-
-        Ok(CommandPreview {
-            command_id: Uuid::new_v4(),
-            description: format!("Edit file: {}", args.file_path),
-            actions,
-            requires_approval: true, // File edits should require approval
-        })
+        self.generate_preview(&args, context).await
     }
 
     async fn execute(
@@ -320,35 +356,50 @@ impl CommandExecutor for EditCommand {
             .into());
         }
 
-        // Validate that we have a valid edit operation
-        let has_content = args.content.is_some();
-        let has_search_replace = args.search.is_some() && args.replace.is_some();
-        let has_line_range = args.line_start.is_some();
-
-        if !(has_content || has_search_replace || has_line_range) {
-            return Err(FennecError::Command {
-                message: "Must specify content, search/replace pair, or line range".to_string(),
-            }
-            .into());
-        }
-
-        // Validate line numbers
-        if let Some(line_start) = args.line_start {
-            if line_start == 0 {
-                return Err(FennecError::Command {
-                    message: "Line numbers must be 1-based (start from 1)".to_string(),
-                }
-                .into());
-            }
-
-            if let Some(line_end) = args.line_end {
-                if line_end < line_start {
+        // Validate strategy-specific constraints
+        match &args.strategy {
+            EditStrategyArgs::Replace { content } => {
+                if content.is_empty() {
                     return Err(FennecError::Command {
-                        message: "Line end must be greater than or equal to line start".to_string(),
+                        message: "Replacement content cannot be empty (use empty string \"\" for clearing file)".to_string(),
                     }
                     .into());
                 }
             }
+            EditStrategyArgs::InsertAtLine { line_number, .. } => {
+                if *line_number == 0 {
+                    return Err(FennecError::Command {
+                        message: "Line numbers must be 1-based (start from 1)".to_string(),
+                    }
+                    .into());
+                }
+            }
+            EditStrategyArgs::SearchReplace { search, .. } => {
+                if search.is_empty() {
+                    return Err(FennecError::Command {
+                        message: "Search string cannot be empty".to_string(),
+                    }
+                    .into());
+                }
+            }
+            EditStrategyArgs::LineRange { start, end, .. } => {
+                if *start == 0 {
+                    return Err(FennecError::Command {
+                        message: "Line numbers must be 1-based (start from 1)".to_string(),
+                    }
+                    .into());
+                }
+                if let Some(end_line) = end {
+                    if *end_line < *start {
+                        return Err(FennecError::Command {
+                            message: "End line must be greater than or equal to start line"
+                                .to_string(),
+                        }
+                        .into());
+                    }
+                }
+            }
+            _ => {} // Other strategies are always valid if they deserialize correctly
         }
 
         Ok(())
@@ -366,41 +417,55 @@ mod tests {
     async fn test_edit_command_validation() {
         let command = EditCommand::new();
 
-        // Valid args - content replacement
+        // Valid args - replace strategy
         let valid_args = serde_json::json!({
             "file_path": "test.txt",
-            "content": "Hello, world!"
+            "strategy": {
+                "type": "Replace",
+                "data": { "content": "Hello, world!" }
+            }
         });
         assert!(command.validate_args(&valid_args).is_ok());
 
         // Valid args - search and replace
         let search_replace_args = serde_json::json!({
             "file_path": "test.txt",
-            "search": "old",
-            "replace": "new"
+            "strategy": {
+                "type": "SearchReplace",
+                "data": { "search": "old", "replace": "new" }
+            }
         });
         assert!(command.validate_args(&search_replace_args).is_ok());
 
         // Invalid args - empty file path
         let empty_path = serde_json::json!({
             "file_path": "",
-            "content": "test"
+            "strategy": {
+                "type": "Replace",
+                "data": { "content": "test" }
+            }
         });
         assert!(command.validate_args(&empty_path).is_err());
-
-        // Invalid args - no edit operation
-        let no_operation = serde_json::json!({
-            "file_path": "test.txt"
-        });
-        assert!(command.validate_args(&no_operation).is_err());
 
         // Invalid args - zero-based line number
         let zero_line = serde_json::json!({
             "file_path": "test.txt",
-            "line_start": 0,
-            "content": "test"
+            "strategy": {
+                "type": "InsertAtLine",
+                "data": { "line_number": 0, "content": "test" }
+            }
         });
         assert!(command.validate_args(&zero_line).is_err());
+
+        // Invalid args - empty search string
+        let empty_search = serde_json::json!({
+            "file_path": "test.txt",
+            "strategy": {
+                "type": "SearchReplace",
+                "data": { "search": "", "replace": "new" }
+            }
+        });
+        assert!(command.validate_args(&empty_search).is_err());
     }
 
     #[tokio::test]
@@ -416,14 +481,18 @@ mod tests {
         // Test content replacement
         let args = serde_json::json!({
             "file_path": test_file.to_string_lossy(),
-            "content": "New content"
+            "strategy": {
+                "type": "Replace",
+                "data": { "content": "New content" }
+            },
+            "backup": true
         });
 
         let context = CommandContext {
             session_id: Uuid::new_v4(),
             user_id: None,
             workspace_path: Some(temp_dir.path().to_string_lossy().to_string()),
-            sandbox_level: SandboxLevel::FullAccess, // Use full access for test
+            sandbox_level: SandboxLevel::FullAccess,
             dry_run: false,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
@@ -431,8 +500,10 @@ mod tests {
 
         let result = command.execute(&args, &context).await.unwrap();
         assert!(result.success);
+        assert!(result.output.contains("Successfully edited file"));
+        assert!(result.output.contains("Created backup"));
 
-        let new_content = fs::read_to_string(&test_file).await.unwrap();
+        let new_content = tokio::fs::read_to_string(&test_file).await.unwrap();
         assert_eq!(new_content, "New content");
     }
 
@@ -448,8 +519,10 @@ mod tests {
 
         let args = serde_json::json!({
             "file_path": test_file.to_string_lossy(),
-            "search": "world",
-            "replace": "universe"
+            "strategy": {
+                "type": "SearchReplace",
+                "data": { "search": "world", "replace": "universe" }
+            }
         });
 
         let context = CommandContext {
@@ -465,7 +538,81 @@ mod tests {
         let result = command.execute(&args, &context).await.unwrap();
         assert!(result.success);
 
-        let new_content = fs::read_to_string(&test_file).await.unwrap();
+        let new_content = tokio::fs::read_to_string(&test_file).await.unwrap();
         assert_eq!(new_content, "Hello universe\nGoodbye universe");
+    }
+
+    #[tokio::test]
+    async fn test_append_strategy() {
+        let temp_dir = tempdir().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        let initial_content = "line 1\nline 2";
+
+        write(&test_file, initial_content).await.unwrap();
+
+        let command = EditCommand::new();
+
+        let args = serde_json::json!({
+            "file_path": test_file.to_string_lossy(),
+            "strategy": {
+                "type": "Append",
+                "data": { "content": "line 3" }
+            }
+        });
+
+        let context = CommandContext {
+            session_id: Uuid::new_v4(),
+            user_id: None,
+            workspace_path: Some(temp_dir.path().to_string_lossy().to_string()),
+            sandbox_level: SandboxLevel::FullAccess,
+            dry_run: false,
+            preview_only: false,
+            cancellation_token: CancellationToken::new(),
+        };
+
+        let result = command.execute(&args, &context).await.unwrap();
+        assert!(result.success);
+
+        let new_content = tokio::fs::read_to_string(&test_file).await.unwrap();
+        assert_eq!(new_content, "line 1\nline 2\nline 3");
+    }
+
+    #[tokio::test]
+    async fn test_dry_run() {
+        let temp_dir = tempdir().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        let initial_content = "line 1\nline 2\nline 3";
+
+        write(&test_file, initial_content).await.unwrap();
+
+        let command = EditCommand::new();
+
+        let args = serde_json::json!({
+            "file_path": test_file.to_string_lossy(),
+            "strategy": {
+                "type": "SearchReplace",
+                "data": { "search": "line 2", "replace": "modified line 2" }
+            }
+        });
+
+        let context = CommandContext {
+            session_id: Uuid::new_v4(),
+            user_id: None,
+            workspace_path: Some(temp_dir.path().to_string_lossy().to_string()),
+            sandbox_level: SandboxLevel::FullAccess,
+            dry_run: true,
+            preview_only: false,
+            cancellation_token: CancellationToken::new(),
+        };
+
+        let result = command.execute(&args, &context).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("DRY RUN"));
+        assert!(result.output.contains("-line 2"));
+        assert!(result.output.contains("+modified line 2"));
+
+        // File should remain unchanged
+        let unchanged_content = tokio::fs::read_to_string(&test_file).await.unwrap();
+        assert_eq!(unchanged_content, initial_content);
     }
 }

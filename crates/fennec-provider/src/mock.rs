@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use fennec_core::provider::{ProviderClient, ProviderMessage, ProviderRequest, ProviderResponse, Usage};
+use fennec_core::provider::{
+    ProviderClient, ProviderMessage, ProviderRequest, ProviderResponse, Usage,
+};
 use fennec_core::Result;
 use futures::stream;
 use uuid::Uuid;

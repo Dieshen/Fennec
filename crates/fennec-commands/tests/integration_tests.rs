@@ -94,14 +94,16 @@ async fn test_edit_command_integration() -> Result<()> {
     // Test search and replace
     let args = serde_json::json!({
         "file_path": test_file.to_string_lossy(),
-        "search": "World",
-        "replace": "Universe",
+        "strategy": {
+            "type": "SearchReplace",
+            "data": { "search": "World", "replace": "Universe" }
+        },
         "backup": true
     });
 
     let result = registry.execute_command("edit", &args, &context).await?;
     assert!(result.success);
-    assert!(result.output.contains("Replaced 1 occurrences"));
+    assert!(result.output.contains("Successfully edited file"));
 
     // Verify the change
     let new_content = fs::read_to_string(&test_file).await?;
@@ -250,13 +252,16 @@ async fn test_dry_run_functionality() -> Result<()> {
     // Test dry run with edit command
     let args = serde_json::json!({
         "file_path": "/tmp/nonexistent.txt",
-        "content": "test content",
+        "strategy": {
+            "type": "Replace",
+            "data": { "content": "test content" }
+        },
         "create_if_missing": true
     });
 
     let result = registry.execute_command("edit", &args, &context).await?;
     assert!(result.success);
-    assert!(result.output.contains("would edit"));
+    assert!(result.output.contains("DRY RUN"));
 
     // Test dry run with run command
     let run_args = serde_json::json!({

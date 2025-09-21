@@ -7,7 +7,7 @@ use crate::theme::{ComponentType, ThemeManager};
 
 use fennec_core::Result;
 use fennec_orchestration::SessionManager;
-use fennec_security::SandboxLevel;
+use fennec_security::{ApprovalManager, SandboxLevel, SandboxPolicy};
 
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, MouseEvent},
@@ -34,7 +34,9 @@ pub enum AppState {
 pub struct App {
     // Core dependencies
     session_manager: SessionManager,
-    sandbox_level: SandboxLevel,
+    sandbox_policy: Option<SandboxPolicy>,
+    #[allow(dead_code)]
+    approval_manager: Option<ApprovalManager>,
 
     // TUI components
     terminal: Terminal<CrosstermBackend<Stdout>>,
@@ -60,9 +62,10 @@ pub struct App {
 }
 
 impl App {
-    /// Create a new application instance
+    /// Create a new application instance (legacy method for backward compatibility)
     pub async fn new(session_manager: SessionManager, sandbox_level: SandboxLevel) -> Result<Self> {
-        info!("Initializing Fennec TUI application");
+        info!("Initializing Fennec TUI application (legacy mode)");
+        warn!("Using legacy constructor - security features may be limited");
 
         // Initialize terminal
         enable_raw_mode()?;
@@ -90,7 +93,69 @@ impl App {
 
         Ok(Self {
             session_manager,
-            sandbox_level,
+            sandbox_policy: None,
+            approval_manager: None,
+            terminal,
+            event_handler,
+            theme_manager,
+            layout_manager,
+            chat_view,
+            input_field,
+            status_bar,
+            preview_panel,
+            state: AppState::Running,
+            focused_pane: Pane::Chat,
+            show_help: false,
+            current_popup: None,
+            last_render: Instant::now(),
+            frame_count: 0,
+        })
+    }
+
+    /// Create a new application instance with full security integration
+    pub async fn new_with_security(
+        session_manager: SessionManager,
+        sandbox_policy: SandboxPolicy,
+        approval_manager: ApprovalManager,
+    ) -> Result<Self> {
+        info!("Initializing Fennec TUI application with security integration");
+        info!("Sandbox level: {}", sandbox_policy.level());
+        info!("Workspace: {}", sandbox_policy.workspace_path().display());
+        info!("Approval required: {}", sandbox_policy.requires_approval());
+
+        // Initialize terminal
+        enable_raw_mode()?;
+        let mut stdout = io::stdout();
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+        let backend = CrosstermBackend::new(stdout);
+        let terminal = Terminal::new(backend)?;
+
+        // Initialize event handling
+        let event_handler = EventHandler::new(Duration::from_millis(250));
+
+        // Spawn background event listener
+        spawn_event_listener(event_handler.sender());
+
+        // Initialize managers and components
+        let theme_manager = ThemeManager::new();
+        let layout_manager = LayoutManager::default();
+        let chat_view = ChatView::new();
+        let input_field = InputField::new();
+        let mut status_bar = StatusBar::new();
+        let preview_panel = PreviewPanel::new();
+
+        // Setup initial status bar with security info
+        Self::update_status_bar_with_security(
+            &mut status_bar,
+            InputMode::Normal,
+            &sandbox_policy,
+            0,
+        );
+
+        Ok(Self {
+            session_manager,
+            sandbox_policy: Some(sandbox_policy),
+            approval_manager: Some(approval_manager),
             terminal,
             event_handler,
             theme_manager,
@@ -509,15 +574,27 @@ impl App {
     /// Update status bar information
     fn update_status_bar_info(&mut self) {
         self.status_bar.clear();
-        Self::update_status_bar(
-            &mut self.status_bar,
-            self.event_handler.input_mode(),
-            &self.sandbox_level,
-            self.chat_view.messages().len(),
-        );
+
+        if let Some(ref sandbox_policy) = self.sandbox_policy {
+            // Use security-aware status bar
+            Self::update_status_bar_with_security(
+                &mut self.status_bar,
+                self.event_handler.input_mode(),
+                sandbox_policy,
+                self.chat_view.messages().len(),
+            );
+        } else {
+            // Fallback to legacy status bar
+            Self::update_status_bar(
+                &mut self.status_bar,
+                self.event_handler.input_mode(),
+                &SandboxLevel::WorkspaceWrite, // Default fallback
+                self.chat_view.messages().len(),
+            );
+        }
     }
 
-    /// Update status bar with current information
+    /// Update status bar with current information (legacy method)
     fn update_status_bar(
         status_bar: &mut StatusBar,
         mode: InputMode,
@@ -554,6 +631,82 @@ impl App {
             label: "Messages".to_string(),
             value: message_count.to_string(),
             style: ComponentType::Text,
+        });
+
+        status_bar.add_right(StatusItem {
+            label: "Help".to_string(),
+            value: "?".to_string(),
+            style: ComponentType::Muted,
+        });
+    }
+
+    /// Update status bar with security information
+    fn update_status_bar_with_security(
+        status_bar: &mut StatusBar,
+        mode: InputMode,
+        sandbox_policy: &SandboxPolicy,
+        message_count: usize,
+    ) {
+        // Left side items
+        let mode_text = match mode {
+            InputMode::Normal => "NORMAL",
+            InputMode::Insert => "INSERT",
+            InputMode::Command => "COMMAND",
+            InputMode::Search => "SEARCH",
+        };
+
+        let mode_style = match mode {
+            InputMode::Normal => ComponentType::StatusInactive,
+            _ => ComponentType::StatusActive,
+        };
+
+        status_bar.add_left(StatusItem {
+            label: "Mode".to_string(),
+            value: mode_text.to_string(),
+            style: mode_style,
+        });
+
+        // Security status with color coding
+        let (sandbox_display, sandbox_style) = match sandbox_policy.level() {
+            SandboxLevel::ReadOnly => ("🔒 READ-ONLY".to_string(), ComponentType::StatusActive),
+            SandboxLevel::WorkspaceWrite => ("📝 WORKSPACE".to_string(), ComponentType::Text),
+            SandboxLevel::FullAccess => ("⚠️ DANGER".to_string(), ComponentType::Error),
+        };
+
+        status_bar.add_left(StatusItem {
+            label: "Security".to_string(),
+            value: sandbox_display,
+            style: sandbox_style,
+        });
+
+        // Approval indicator
+        if sandbox_policy.requires_approval() {
+            status_bar.add_left(StatusItem {
+                label: "Approval".to_string(),
+                value: "🛡️ ON".to_string(),
+                style: ComponentType::StatusActive,
+            });
+        }
+
+        // Right side items
+        status_bar.add_right(StatusItem {
+            label: "Messages".to_string(),
+            value: message_count.to_string(),
+            style: ComponentType::Text,
+        });
+
+        // Workspace indicator (abbreviated path)
+        let workspace_display = sandbox_policy
+            .workspace_path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("workspace")
+            .to_string();
+
+        status_bar.add_right(StatusItem {
+            label: "Workspace".to_string(),
+            value: workspace_display,
+            style: ComponentType::Muted,
         });
 
         status_bar.add_right(StatusItem {

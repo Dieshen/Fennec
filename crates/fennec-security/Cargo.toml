@@ -20,6 +20,8 @@ directories.workspace = true
 ring.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+hex.workspace = true
+tokio-util.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

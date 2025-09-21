@@ -9,7 +9,7 @@ pub struct Command {
     pub capabilities: Vec<Capability>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Capability {
     ReadFile,
     WriteFile,
@@ -25,7 +25,7 @@ pub struct CommandPreview {
     pub requires_approval: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum PreviewAction {
     ReadFile { path: String },
     WriteFile { path: String, content: String },

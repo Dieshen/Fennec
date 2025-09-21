@@ -1,6 +1,7 @@
 pub mod common;
 pub mod diff;
 pub mod edit;
+pub mod file_ops;
 pub mod plan;
 pub mod registry;
 pub mod run;
@@ -15,6 +16,9 @@ pub use registry::{
 // Re-export individual commands
 pub use diff::{DiffArgs, DiffCommand};
 pub use edit::{EditArgs, EditCommand};
+pub use file_ops::{
+    EditStrategy, FileEditRequest, FileEditResult, FileOperations, FileOperationsConfig,
+};
 pub use plan::{PlanArgs, PlanCommand};
 pub use run::{RunArgs, RunCommand};
 pub use summarize::{SummarizeArgs, SummarizeCommand};

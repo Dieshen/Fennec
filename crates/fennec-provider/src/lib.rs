@@ -1,9 +1,9 @@
 pub mod client;
 pub mod error;
+pub mod mock;
 pub mod models;
 pub mod openai;
 pub mod streaming;
-pub mod mock;
 
 #[cfg(test)]
 mod integration_test;
