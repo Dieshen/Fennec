@@ -1,0 +1,25 @@
+[package]
+name = "fennec-provider"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "LLM provider implementations for Fennec"
+
+[dependencies]
+fennec-core = { path = "../fennec-core" }
+
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+futures.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true
+tempfile.workspace = true

@@ -1,0 +1,25 @@
+[package]
+name = "fennec-security"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Security, sandboxing, and audit logging for Fennec"
+
+[dependencies]
+fennec-core = { path = "../fennec-core" }
+
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+directories.workspace = true
+ring.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

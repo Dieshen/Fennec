@@ -1,0 +1,25 @@
+[package]
+name = "fennec-tui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Terminal UI components for Fennec"
+
+[dependencies]
+fennec-core = { path = "../fennec-core" }
+fennec-orchestration = { path = "../fennec-orchestration" }
+fennec-security = { path = "../fennec-security" }
+
+ratatui.workspace = true
+crossterm.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

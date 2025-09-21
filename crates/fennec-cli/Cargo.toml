@@ -1,0 +1,31 @@
+[package]
+name = "fennec-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Main CLI binary for Fennec AI assistant"
+
+[[bin]]
+name = "fennec"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace crates
+fennec-core = { path = "../fennec-core" }
+fennec-tui = { path = "../fennec-tui" }
+fennec-orchestration = { path = "../fennec-orchestration" }
+fennec-security = { path = "../fennec-security" }
+
+# External dependencies
+clap.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+directories.workspace = true
+dotenvy.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

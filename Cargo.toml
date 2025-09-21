@@ -1,0 +1,84 @@
+[workspace]
+members = [
+    "crates/fennec-cli",
+    "crates/fennec-tui",
+    "crates/fennec-commands",
+    "crates/fennec-orchestration",
+    "crates/fennec-memory",
+    "crates/fennec-provider",
+    "crates/fennec-security",
+    "crates/fennec-core"
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Fennec Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/fennec-ai/fennec"
+description = "Interactive TUI AI assistant for developers"
+keywords = ["ai", "assistant", "tui", "cli", "developer-tools"]
+categories = ["command-line-utilities", "development-tools"]
+
+[workspace.dependencies]
+# TUI and terminal handling
+ratatui = "0.24"
+crossterm = "0.27"
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# HTTP client for providers
+reqwest = { version = "0.11", features = ["json", "stream"] }
+
+# File system utilities
+directories = "5.0"
+walkdir = "2.4"
+
+# Cryptography for secure storage
+ring = "0.17"
+
+# CLI parsing
+clap = { version = "4.0", features = ["derive"] }
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Diff generation
+similar = "2.3"
+
+# Environment variables
+dotenvy = "0.15"
+
+# Testing utilities
+tempfile = "3.8"
+mockall = "0.12"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true

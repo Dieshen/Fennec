@@ -1,0 +1,27 @@
+# Build artifacts
+/target
+**/target/
+
+# Generated outputs
+/dist/
+/build/
+
+# Logs & temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Tooling caches
+/.idea/
+/.vscode/
+/.fleet/
+/.cargo/
+
+# Local environment overrides
+.env
+.env.*

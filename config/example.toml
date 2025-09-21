@@ -1,0 +1,30 @@
+# Fennec Configuration Example
+# Copy this file to ~/.config/fennec/config.toml or use --config flag
+
+[provider]
+# OpenAI API configuration
+# Set OPENAI_API_KEY environment variable instead of hardcoding here
+default_model = "gpt-4"
+# base_url = "https://api.openai.com/v1"  # Override for custom endpoints
+timeout_seconds = 30
+
+[security]
+# Sandbox levels: "read-only", "workspace-write", "danger-full-access"
+default_sandbox_level = "workspace-write"
+audit_log_enabled = true
+# audit_log_path = "/path/to/audit.jsonl"  # Override default location
+
+[memory]
+# Where to store session data and memory files
+storage_path = ".fennec"
+max_transcript_size = 10000
+enable_agents_md = true
+
+[tui]
+# UI theme and keybindings
+theme = "default"
+
+[tui.key_bindings]
+quit = "Ctrl+C"
+help = "F1"
+clear = "Ctrl+L"

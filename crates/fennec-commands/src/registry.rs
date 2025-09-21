@@ -1,0 +1,1 @@
+// Command registry implementation will go here

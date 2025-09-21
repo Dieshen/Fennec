@@ -1,0 +1,28 @@
+[package]
+name = "fennec-orchestration"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Session orchestration and agent coordination for Fennec"
+
+[dependencies]
+fennec-core = { path = "../fennec-core" }
+fennec-provider = { path = "../fennec-provider" }
+fennec-commands = { path = "../fennec-commands" }
+fennec-memory = { path = "../fennec-memory" }
+fennec-security = { path = "../fennec-security" }
+
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+futures.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true
+tempfile.workspace = true
