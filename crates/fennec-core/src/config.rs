@@ -88,8 +88,8 @@ impl Config {
         if config_file.exists() {
             info!("Loading config from: {}", config_file.display());
             let content = tokio::fs::read_to_string(&config_file).await?;
-            let mut config: Config = toml::from_str(&content)
-                .map_err(|e| crate::FennecError::Config {
+            let mut config: Config =
+                toml::from_str(&content).map_err(|e| crate::FennecError::Config {
                     message: format!("Failed to parse config file: {}", e),
                 })?;
 
@@ -105,10 +105,11 @@ impl Config {
     }
 
     fn default_config_path() -> Result<PathBuf> {
-        let project_dirs = ProjectDirs::from("com", "fennec", "fennec")
-            .ok_or_else(|| crate::FennecError::Config {
+        let project_dirs = ProjectDirs::from("com", "fennec", "fennec").ok_or_else(|| {
+            crate::FennecError::Config {
                 message: "Could not determine config directory".to_string(),
-            })?;
+            }
+        })?;
 
         Ok(project_dirs.config_dir().join("config.toml"))
     }

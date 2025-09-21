@@ -30,7 +30,11 @@ pub struct Usage {
     pub total_tokens: u32,
 }
 
+#[async_trait::async_trait]
 pub trait ProviderClient: Send + Sync {
     async fn complete(&self, request: ProviderRequest) -> Result<ProviderResponse>;
-    async fn stream(&self, request: ProviderRequest) -> Result<Box<dyn futures::Stream<Item = Result<String>> + Unpin + Send>>;
+    async fn stream(
+        &self,
+        request: ProviderRequest,
+    ) -> Result<Box<dyn futures::Stream<Item = Result<String>> + Unpin + Send>>;
 }

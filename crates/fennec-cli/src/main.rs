@@ -4,7 +4,7 @@ use fennec_core::config::Config;
 use fennec_orchestration::SessionManager;
 use fennec_security::audit::AuditLogger;
 use fennec_tui::app::App;
-use tracing::{info, error};
+use tracing::{error, info};
 use tracing_subscriber;
 
 #[derive(Parser)]

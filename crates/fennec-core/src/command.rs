@@ -9,7 +9,7 @@ pub struct Command {
     pub capabilities: Vec<Capability>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Capability {
     ReadFile,
     WriteFile,

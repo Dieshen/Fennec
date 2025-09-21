@@ -19,6 +19,10 @@ serde_json.workspace = true
 walkdir.workspace = true
 directories.workspace = true
 toml.workspace = true
+chrono.workspace = true
+notify.workspace = true
+fuzzy-matcher.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

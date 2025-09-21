@@ -1,16 +1,14 @@
+pub mod command;
 pub mod config;
+pub mod error;
+pub mod provider;
 pub mod session;
 pub mod transcript;
-pub mod command;
-pub mod provider;
-pub mod error;
 
 pub use error::{FennecError, Result};
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn it_works() {
         let result = 2 + 2;

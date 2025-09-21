@@ -72,6 +72,10 @@ dotenvy = "0.15"
 tempfile = "3.8"
 mockall = "0.12"
 
+# Memory service dependencies
+notify = "6.1"
+fuzzy-matcher = "0.3"
+
 [profile.release]
 opt-level = 3
 lto = true
