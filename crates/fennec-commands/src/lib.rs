@@ -6,6 +6,10 @@ pub mod plan;
 pub mod registry;
 pub mod run;
 pub mod summarize;
+pub mod summarize_enhanced;
+
+#[cfg(test)]
+mod tests;
 
 // Re-export key types and functions for easy use
 pub use common::{format_file_size, initialize_builtin_commands, is_text_file, truncate_text};
@@ -22,6 +26,9 @@ pub use file_ops::{
 pub use plan::{PlanArgs, PlanCommand};
 pub use run::{RunArgs, RunCommand};
 pub use summarize::{SummarizeArgs, SummarizeCommand};
+pub use summarize_enhanced::{
+    EnhancedSummarizeArgs, EnhancedSummarizeCommand, OutputDestination, SummaryDepth, SummaryType,
+};
 
 /// Create a fully initialized command registry with all built-in commands
 ///

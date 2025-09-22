@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::registry::CommandRegistry;
 use crate::{
     diff::DiffCommand, edit::EditCommand, plan::PlanCommand, run::RunCommand,
-    summarize::SummarizeCommand,
+    summarize::SummarizeCommand, summarize_enhanced::EnhancedSummarizeCommand,
 };
 
 /// Initialize the command registry with all built-in commands
@@ -31,6 +31,21 @@ pub async fn initialize_builtin_commands() -> Result<CommandRegistry> {
     registry
         .register_builtin(Arc::new(SummarizeCommand::new()))
         .await?;
+
+    // Register enhanced summarize command with memory services if available
+    match EnhancedSummarizeCommand::with_memory_services().await {
+        Ok(enhanced_summarize) => {
+            registry
+                .register_builtin(Arc::new(enhanced_summarize))
+                .await?;
+        }
+        Err(_) => {
+            // Fallback to basic enhanced summarize without memory services
+            registry
+                .register_builtin(Arc::new(EnhancedSummarizeCommand::new()))
+                .await?;
+        }
+    }
 
     Ok(registry)
 }
@@ -159,8 +174,8 @@ mod tests {
         let registry = initialize_builtin_commands().await.unwrap();
         let commands = registry.list_commands().await;
 
-        // Should have all 5 built-in commands
-        assert_eq!(commands.len(), 5);
+        // Should have all 6 built-in commands (including enhanced summarize)
+        assert_eq!(commands.len(), 6);
 
         let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
         assert!(command_names.contains(&"plan".to_string()));
@@ -168,5 +183,6 @@ mod tests {
         assert!(command_names.contains(&"run".to_string()));
         assert!(command_names.contains(&"diff".to_string()));
         assert!(command_names.contains(&"summarize".to_string()));
+        assert!(command_names.contains(&"summarize_enhanced".to_string()));
     }
 }

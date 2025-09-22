@@ -13,6 +13,8 @@ use fennec_core::{
 
 use crate::{
     agents::{AgentsConfig, AgentsService, GuidanceMatch},
+    cline_files::{Achievement, ClineFileType, ClineMemoryFileService, MemoryEvent, ProjectStatus},
+    files::MemoryFileService,
     transcript::{TranscriptSearchResult, TranscriptStore},
 };
 
@@ -23,6 +25,10 @@ pub struct MemoryService {
     agents_service: Arc<AgentsService>,
     /// Transcript storage service
     transcript_store: Arc<RwLock<TranscriptStore>>,
+    /// Memory file service
+    memory_file_service: Arc<RwLock<MemoryFileService>>,
+    /// Cline-style memory file service
+    cline_memory_service: Arc<RwLock<ClineMemoryFileService>>,
     /// Active sessions being tracked
     active_sessions: Arc<RwLock<HashMap<Uuid, SessionMemory>>>,
     /// Configuration for memory behavior
@@ -103,19 +109,170 @@ pub struct MemoryInjection {
     pub estimated_tokens: usize,
 }
 
+/// Advanced search criteria for context-aware memory retrieval
+#[derive(Debug, Clone)]
+pub struct AdvancedSearchCriteria {
+    /// Primary search query
+    pub query: String,
+    /// Session-based filtering
+    pub session_filter: Option<SessionFilter>,
+    /// Time-based filtering
+    pub time_filter: Option<TimeFilter>,
+    /// Memory type preferences
+    pub memory_types: Vec<MemoryType>,
+    /// Relevance scoring strategy
+    pub scoring_strategy: ScoringStrategy,
+    /// Maximum number of results
+    pub limit: Option<usize>,
+    /// Minimum relevance score threshold
+    pub min_score: Option<f64>,
+}
+
+/// Session-based filtering options
+#[derive(Debug, Clone)]
+pub enum SessionFilter {
+    /// Only current session
+    CurrentSession(Uuid),
+    /// Exclude current session
+    ExcludeCurrentSession(Uuid),
+    /// Specific sessions only
+    SpecificSessions(Vec<Uuid>),
+    /// Cross-session (all sessions)
+    CrossSession,
+}
+
+/// Time-based filtering options
+#[derive(Debug, Clone)]
+pub enum TimeFilter {
+    /// Last N hours
+    LastHours(u32),
+    /// Last N days
+    LastDays(u32),
+    /// Since specific timestamp
+    Since(chrono::DateTime<chrono::Utc>),
+    /// Between two timestamps
+    Between {
+        start: chrono::DateTime<chrono::Utc>,
+        end: chrono::DateTime<chrono::Utc>,
+    },
+    /// Recent vs historical (split based on configured threshold)
+    Recent,
+    /// Historical only
+    Historical,
+}
+
+/// Memory types that can be searched
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum MemoryType {
+    Transcripts,
+    Guidance,
+    MemoryFiles,
+}
+
+/// Relevance scoring strategies
+#[derive(Debug, Clone)]
+pub enum ScoringStrategy {
+    /// Simple fuzzy matching (current default)
+    FuzzyMatch,
+    /// Weighted scoring considering multiple factors
+    Weighted {
+        text_relevance_weight: f64,
+        recency_weight: f64,
+        session_relevance_weight: f64,
+    },
+    /// Context-aware scoring based on current conversation
+    ContextAware {
+        conversation_context: ConversationContext,
+    },
+    /// Combined scoring using multiple strategies
+    Combined(Vec<ScoringStrategy>),
+}
+
+/// Unified search result combining all memory types
+#[derive(Debug, Clone)]
+pub struct UnifiedSearchResult {
+    /// Type of memory source
+    pub memory_type: MemoryType,
+    /// Unique identifier for this result
+    pub id: String,
+    /// Title or name of the result
+    pub title: String,
+    /// Content preview or excerpt
+    pub content_preview: String,
+    /// Full content (if requested)
+    pub full_content: Option<String>,
+    /// Relevance score (0.0 to 1.0)
+    pub relevance_score: f64,
+    /// Timestamp of creation/update
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Associated session ID (if applicable)
+    pub session_id: Option<Uuid>,
+    /// Additional metadata specific to memory type
+    pub metadata: UnifiedSearchMetadata,
+}
+
+/// Metadata specific to different memory types
+#[derive(Debug, Clone)]
+pub enum UnifiedSearchMetadata {
+    Transcript {
+        message_count: usize,
+        summary: Option<String>,
+        tags: Vec<String>,
+    },
+    Guidance {
+        section_title: String,
+        match_type: crate::agents::MatchType,
+    },
+    MemoryFile {
+        file_type: crate::files::MemoryFileType,
+        tags: Vec<String>,
+        related_sessions: Vec<Uuid>,
+    },
+}
+
+/// Enhanced search results with context and scoring information
+#[derive(Debug, Clone)]
+pub struct EnhancedSearchResults {
+    /// Found results
+    pub results: Vec<UnifiedSearchResult>,
+    /// Search criteria used
+    pub criteria: AdvancedSearchCriteria,
+    /// Search execution metadata
+    pub search_metadata: SearchMetadata,
+}
+
+/// Metadata about search execution
+#[derive(Debug, Clone)]
+pub struct SearchMetadata {
+    /// Total results found (before limit)
+    pub total_found: usize,
+    /// Number of results returned
+    pub returned_count: usize,
+    /// Time taken to execute search
+    pub execution_time_ms: u64,
+    /// Sources searched
+    pub sources_searched: Vec<MemoryType>,
+    /// Scoring strategy used
+    pub scoring_strategy: ScoringStrategy,
+}
+
 impl MemoryService {
     /// Create a new memory service
     pub async fn new() -> Result<Self> {
         let agents_service = Arc::new(AgentsService::new().await?);
         let transcript_store = Arc::new(RwLock::new(TranscriptStore::new()?));
+        let memory_file_service = Arc::new(RwLock::new(MemoryFileService::new()?));
+        let cline_memory_service = Arc::new(RwLock::new(ClineMemoryFileService::new()?));
         let active_sessions = Arc::new(RwLock::new(HashMap::new()));
         let config = MemoryConfig::default();
 
-        info!("Memory service initialized");
+        info!("Memory service initialized with Cline-style memory files");
 
         Ok(Self {
             agents_service,
             transcript_store,
+            memory_file_service,
+            cline_memory_service,
             active_sessions,
             config,
         })
@@ -302,6 +459,82 @@ impl MemoryService {
         })
     }
 
+    /// Enhanced context-aware search across all memory types
+    pub async fn search_advanced(
+        &self,
+        criteria: AdvancedSearchCriteria,
+    ) -> Result<EnhancedSearchResults> {
+        let start_time = std::time::Instant::now();
+        debug!("Advanced search with criteria: {:?}", criteria);
+
+        let mut all_results = Vec::new();
+        let mut sources_searched = Vec::new();
+
+        // Search each memory type if requested
+        for memory_type in &criteria.memory_types {
+            sources_searched.push(memory_type.clone());
+
+            match memory_type {
+                MemoryType::Transcripts => {
+                    let transcript_results = self.search_transcripts_advanced(&criteria).await?;
+                    all_results.extend(transcript_results);
+                }
+                MemoryType::Guidance => {
+                    let guidance_results = self.search_guidance_advanced(&criteria);
+                    all_results.extend(guidance_results);
+                }
+                MemoryType::MemoryFiles => {
+                    let memory_file_results = self.search_memory_files_advanced(&criteria).await?;
+                    all_results.extend(memory_file_results);
+                }
+            }
+        }
+
+        // Apply scoring strategy
+        self.apply_scoring_strategy(&mut all_results, &criteria);
+
+        // Apply time filtering
+        if let Some(ref time_filter) = criteria.time_filter {
+            all_results = self.apply_time_filter(all_results, time_filter);
+        }
+
+        // Apply session filtering
+        if let Some(ref session_filter) = criteria.session_filter {
+            all_results = self.apply_session_filter(all_results, session_filter);
+        }
+
+        // Apply minimum score threshold
+        if let Some(min_score) = criteria.min_score {
+            all_results.retain(|result| result.relevance_score >= min_score);
+        }
+
+        // Sort by relevance score (highest first)
+        all_results.sort_by(|a, b| b.relevance_score.total_cmp(&a.relevance_score));
+
+        let total_found = all_results.len();
+
+        // Apply limit
+        if let Some(limit) = criteria.limit {
+            all_results.truncate(limit);
+        }
+
+        let execution_time = start_time.elapsed();
+
+        let search_metadata = SearchMetadata {
+            total_found,
+            returned_count: all_results.len(),
+            execution_time_ms: execution_time.as_millis() as u64,
+            sources_searched,
+            scoring_strategy: criteria.scoring_strategy.clone(),
+        };
+
+        Ok(EnhancedSearchResults {
+            results: all_results,
+            criteria,
+            search_metadata,
+        })
+    }
+
     /// Get all available guidance sections
     pub fn get_available_guidance(&self) -> Vec<String> {
         self.agents_service.get_all_guidance()
@@ -460,6 +693,429 @@ impl MemoryService {
             .sum();
 
         guidance_tokens + conversation_tokens
+    }
+
+    /// Search transcripts with advanced criteria
+    async fn search_transcripts_advanced(
+        &self,
+        criteria: &AdvancedSearchCriteria,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let store = self.transcript_store.read().await;
+        let transcript_results = store.search_transcripts(&criteria.query, None).await?;
+
+        let mut unified_results = Vec::new();
+        for result in transcript_results {
+            unified_results.push(UnifiedSearchResult {
+                memory_type: MemoryType::Transcripts,
+                id: result.session_id.to_string(),
+                title: format!("Session {}", result.session_id),
+                content_preview: self.generate_content_preview(&result.matching_messages),
+                full_content: None, // Will be populated if needed
+                relevance_score: self.normalize_fuzzy_score(result.score),
+                timestamp: result.metadata.updated_at,
+                session_id: Some(result.session_id),
+                metadata: UnifiedSearchMetadata::Transcript {
+                    message_count: result.metadata.message_count,
+                    summary: result.summary,
+                    tags: Vec::new(), // TODO: Add tags from transcript metadata
+                },
+            });
+        }
+
+        Ok(unified_results)
+    }
+
+    /// Search guidance with advanced criteria
+    fn search_guidance_advanced(
+        &self,
+        criteria: &AdvancedSearchCriteria,
+    ) -> Vec<UnifiedSearchResult> {
+        let guidance_matches = self.agents_service.search_guidance(&criteria.query);
+
+        let mut unified_results = Vec::new();
+        for guidance in guidance_matches {
+            unified_results.push(UnifiedSearchResult {
+                memory_type: MemoryType::Guidance,
+                id: format!("guidance_{}", guidance.section_title.replace(' ', "_")),
+                title: guidance.section_title.clone(),
+                content_preview: self.truncate_content(&guidance.content, 200),
+                full_content: Some(guidance.content.clone()),
+                relevance_score: self.normalize_fuzzy_score(guidance.score),
+                timestamp: chrono::Utc::now(), // Guidance doesn't have timestamps
+                session_id: None,
+                metadata: UnifiedSearchMetadata::Guidance {
+                    section_title: guidance.section_title,
+                    match_type: guidance.match_type,
+                },
+            });
+        }
+
+        unified_results
+    }
+
+    /// Search memory files with advanced criteria
+    async fn search_memory_files_advanced(
+        &self,
+        criteria: &AdvancedSearchCriteria,
+    ) -> Result<Vec<UnifiedSearchResult>> {
+        let mut file_service = self.memory_file_service.write().await;
+        let file_results = file_service
+            .search_memory_files(&criteria.query, None)
+            .await?;
+
+        let mut unified_results = Vec::new();
+        for result in file_results {
+            unified_results.push(UnifiedSearchResult {
+                memory_type: MemoryType::MemoryFiles,
+                id: result.id.to_string(),
+                title: result.name,
+                content_preview: result.content_preview,
+                full_content: None, // Would need to load full file if needed
+                relevance_score: self.normalize_fuzzy_score(result.score),
+                timestamp: result.updated_at,
+                session_id: None, // Memory files can have multiple related sessions
+                metadata: UnifiedSearchMetadata::MemoryFile {
+                    file_type: result.file_type,
+                    tags: Vec::new(), // Would need to load from full file
+                    related_sessions: Vec::new(), // Would need to load from full file
+                },
+            });
+        }
+
+        Ok(unified_results)
+    }
+
+    /// Apply scoring strategy to search results
+    fn apply_scoring_strategy(
+        &self,
+        results: &mut [UnifiedSearchResult],
+        criteria: &AdvancedSearchCriteria,
+    ) {
+        match &criteria.scoring_strategy {
+            ScoringStrategy::FuzzyMatch => {
+                // Already applied during individual searches
+            }
+            ScoringStrategy::Weighted {
+                text_relevance_weight,
+                recency_weight,
+                session_relevance_weight,
+            } => {
+                let now = chrono::Utc::now();
+                let current_session = self.get_current_session_from_criteria(criteria);
+
+                for result in results.iter_mut() {
+                    let text_score = result.relevance_score;
+
+                    // Calculate recency score (more recent = higher score)
+                    let hours_old = (now - result.timestamp).num_hours() as f64;
+                    let recency_score = 1.0 / (1.0 + hours_old / 24.0); // Decay over days
+
+                    // Calculate session relevance score
+                    let session_score = if let Some(current_session) = current_session {
+                        if result.session_id == Some(current_session) {
+                            1.0
+                        } else {
+                            0.5 // Related sessions get partial score
+                        }
+                    } else {
+                        0.8 // Default score when no session context
+                    };
+
+                    // Combine scores with weights
+                    result.relevance_score = text_score * text_relevance_weight
+                        + recency_score * recency_weight
+                        + session_score * session_relevance_weight;
+                }
+            }
+            ScoringStrategy::ContextAware {
+                conversation_context,
+            } => {
+                for result in results.iter_mut() {
+                    let mut context_bonus = 0.0;
+
+                    // Boost score if content relates to current technologies
+                    for tech in &conversation_context.technologies {
+                        if result
+                            .content_preview
+                            .to_lowercase()
+                            .contains(&tech.to_lowercase())
+                        {
+                            context_bonus += 0.2;
+                        }
+                    }
+
+                    // Boost score if content relates to current task
+                    if let Some(ref task) = conversation_context.current_task {
+                        if result
+                            .content_preview
+                            .to_lowercase()
+                            .contains(&task.to_lowercase())
+                        {
+                            context_bonus += 0.3;
+                        }
+                    }
+
+                    // Boost score if content relates to recent topics
+                    for topic in &conversation_context.recent_topics {
+                        if result
+                            .content_preview
+                            .to_lowercase()
+                            .contains(&topic.to_lowercase())
+                        {
+                            context_bonus += 0.1;
+                        }
+                    }
+
+                    result.relevance_score = (result.relevance_score + context_bonus).min(1.0);
+                }
+            }
+            ScoringStrategy::Combined(strategies) => {
+                // Apply each strategy and average the scores
+                let original_scores: Vec<f64> = results.iter().map(|r| r.relevance_score).collect();
+
+                for strategy in strategies {
+                    let mut temp_criteria = criteria.clone();
+                    temp_criteria.scoring_strategy = strategy.clone();
+                    self.apply_scoring_strategy(results, &temp_criteria);
+                }
+
+                // Average with original scores
+                for (i, result) in results.iter_mut().enumerate() {
+                    result.relevance_score = (result.relevance_score + original_scores[i]) / 2.0;
+                }
+            }
+        }
+    }
+
+    /// Apply time-based filtering
+    fn apply_time_filter(
+        &self,
+        mut results: Vec<UnifiedSearchResult>,
+        time_filter: &TimeFilter,
+    ) -> Vec<UnifiedSearchResult> {
+        let now = chrono::Utc::now();
+
+        results.retain(|result| {
+            match time_filter {
+                TimeFilter::LastHours(hours) => {
+                    let cutoff = now - chrono::Duration::hours(*hours as i64);
+                    result.timestamp >= cutoff
+                }
+                TimeFilter::LastDays(days) => {
+                    let cutoff = now - chrono::Duration::days(*days as i64);
+                    result.timestamp >= cutoff
+                }
+                TimeFilter::Since(timestamp) => result.timestamp >= *timestamp,
+                TimeFilter::Between { start, end } => {
+                    result.timestamp >= *start && result.timestamp <= *end
+                }
+                TimeFilter::Recent => {
+                    // Consider recent as last 24 hours
+                    let cutoff = now - chrono::Duration::hours(24);
+                    result.timestamp >= cutoff
+                }
+                TimeFilter::Historical => {
+                    // Consider historical as older than 24 hours
+                    let cutoff = now - chrono::Duration::hours(24);
+                    result.timestamp < cutoff
+                }
+            }
+        });
+
+        results
+    }
+
+    /// Apply session-based filtering
+    fn apply_session_filter(
+        &self,
+        mut results: Vec<UnifiedSearchResult>,
+        session_filter: &SessionFilter,
+    ) -> Vec<UnifiedSearchResult> {
+        results.retain(|result| {
+            match session_filter {
+                SessionFilter::CurrentSession(session_id) => result.session_id == Some(*session_id),
+                SessionFilter::ExcludeCurrentSession(session_id) => {
+                    result.session_id != Some(*session_id)
+                }
+                SessionFilter::SpecificSessions(session_ids) => result
+                    .session_id
+                    .map_or(false, |id| session_ids.contains(&id)),
+                SessionFilter::CrossSession => {
+                    true // Include all sessions
+                }
+            }
+        });
+
+        results
+    }
+
+    /// Helper to get current session from criteria
+    fn get_current_session_from_criteria(&self, criteria: &AdvancedSearchCriteria) -> Option<Uuid> {
+        match &criteria.session_filter {
+            Some(SessionFilter::CurrentSession(session_id)) => Some(*session_id),
+            _ => None,
+        }
+    }
+
+    /// Normalize fuzzy match scores to 0.0-1.0 range
+    fn normalize_fuzzy_score(&self, fuzzy_score: i64) -> f64 {
+        // Fuzzy scores can vary widely, normalize to 0.0-1.0
+        // This is a rough approximation - in production you'd want to calibrate this
+        let normalized = fuzzy_score as f64 / 1000.0;
+        normalized.min(1.0).max(0.0)
+    }
+
+    /// Generate content preview from messages
+    fn generate_content_preview(&self, messages: &[fennec_core::transcript::Message]) -> String {
+        if messages.is_empty() {
+            return String::new();
+        }
+
+        // Take the first few messages and create a preview
+        let preview_text: String = messages
+            .iter()
+            .take(3)
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        self.truncate_content(&preview_text, 200)
+    }
+
+    /// Truncate content to specified length
+    fn truncate_content(&self, content: &str, max_length: usize) -> String {
+        if content.len() <= max_length {
+            content.to_string()
+        } else {
+            format!("{}...", &content[..max_length])
+        }
+    }
+
+    // ================================
+    // Cline-style Memory File Methods
+    // ================================
+
+    /// Initialize Cline-style memory files for a project
+    pub async fn initialize_project_memory(&self, project_id: Uuid) -> Result<()> {
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service.initialize_project(project_id).await?;
+        info!("Initialized Cline memory files for project: {}", project_id);
+        Ok(())
+    }
+
+    /// Get project brief as markdown
+    pub async fn get_project_brief(&self, project_id: Uuid) -> Result<Option<String>> {
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service
+            .render_to_markdown(project_id, ClineFileType::ProjectBrief)
+            .await
+    }
+
+    /// Get active context as markdown
+    pub async fn get_active_context(&self, project_id: Uuid) -> Result<Option<String>> {
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service
+            .render_to_markdown(project_id, ClineFileType::ActiveContext)
+            .await
+    }
+
+    /// Get progress tracking as markdown
+    pub async fn get_progress(&self, project_id: Uuid) -> Result<Option<String>> {
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service
+            .render_to_markdown(project_id, ClineFileType::Progress)
+            .await
+    }
+
+    /// Update project goals
+    pub async fn update_project_goals(&self, project_id: Uuid, goals: Vec<String>) -> Result<()> {
+        let event = MemoryEvent::ProjectGoalUpdated { project_id, goals };
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service.handle_event(event).await?;
+        Ok(())
+    }
+
+    /// Update project status
+    pub async fn update_project_status(
+        &self,
+        project_id: Uuid,
+        status: ProjectStatus,
+    ) -> Result<()> {
+        let event = MemoryEvent::ProjectStatusChanged { project_id, status };
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service.handle_event(event).await?;
+        Ok(())
+    }
+
+    /// Mark a task as completed
+    pub async fn complete_task(
+        &self,
+        project_id: Uuid,
+        session_id: Option<Uuid>,
+        task: String,
+        outcome: String,
+    ) -> Result<()> {
+        let event = MemoryEvent::TaskCompleted {
+            project_id,
+            session_id,
+            task,
+            outcome,
+        };
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service.handle_event(event).await?;
+        Ok(())
+    }
+
+    /// Record an achievement
+    pub async fn record_achievement(
+        &self,
+        project_id: Uuid,
+        session_id: Option<Uuid>,
+        achievement: Achievement,
+    ) -> Result<()> {
+        let event = MemoryEvent::AchievementReached {
+            project_id,
+            session_id,
+            achievement,
+        };
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service.handle_event(event).await?;
+        Ok(())
+    }
+
+    /// Archive a project's memory files
+    pub async fn archive_project(&self, project_id: Uuid) -> Result<std::path::PathBuf> {
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service.archive_project(project_id).await
+    }
+
+    /// Create backup of project files
+    pub async fn backup_project(&self, project_id: Uuid) -> Result<std::path::PathBuf> {
+        let cline_service = self.cline_memory_service.read().await;
+        cline_service.backup_files(project_id).await
+    }
+
+    /// List all projects with memory files
+    pub async fn list_projects(&self) -> Result<Vec<Uuid>> {
+        let cline_service = self.cline_memory_service.read().await;
+        cline_service.list_projects().await
+    }
+
+    /// Emit memory event to update Cline files (internal method)
+    #[allow(dead_code)]
+    async fn emit_memory_event(&self, event: MemoryEvent) -> Result<()> {
+        let mut cline_service = self.cline_memory_service.write().await;
+        cline_service.handle_event(event).await?;
+        Ok(())
+    }
+
+    /// Get session's project ID (would need to be tracked separately in real implementation)
+    pub fn get_session_project_id(&self, _session_id: Uuid) -> Option<Uuid> {
+        // For now, return None - in a real implementation, you'd need to track
+        // which sessions belong to which projects
+        // This could be stored in the SessionMemory struct or a separate mapping
+        warn!("Session to project mapping not implemented - returning None");
+        None
     }
 }
 

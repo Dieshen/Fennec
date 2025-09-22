@@ -11,6 +11,8 @@ description = "Terminal UI components for Fennec"
 fennec-core = { path = "../fennec-core" }
 fennec-orchestration = { path = "../fennec-orchestration" }
 fennec-security = { path = "../fennec-security" }
+fennec-commands = { path = "../fennec-commands" }
+fennec-memory = { path = "../fennec-memory" }
 
 ratatui.workspace = true
 crossterm.workspace = true
@@ -21,6 +23,7 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -22,6 +22,9 @@ pub enum ComponentType {
     PreviewBorder,
     ScrollbarThumb,
     ScrollbarTrack,
+    Tab,
+    TabSelected,
+    ListSelected,
 }
 
 /// Color theme configuration
@@ -47,6 +50,9 @@ pub struct ColorTheme {
     pub preview_border: Color,
     pub scrollbar_thumb: Color,
     pub scrollbar_track: Color,
+    pub tab: Color,
+    pub tab_selected: Color,
+    pub list_selected: Color,
 }
 
 impl Default for ColorTheme {
@@ -79,6 +85,9 @@ impl ColorTheme {
             preview_border: Color::Rgb(137, 180, 250),
             scrollbar_thumb: Color::Rgb(108, 112, 134),
             scrollbar_track: Color::Rgb(49, 50, 68),
+            tab: Color::Rgb(137, 180, 250),
+            tab_selected: Color::Rgb(166, 227, 161),
+            list_selected: Color::Rgb(49, 50, 68),
         }
     }
 
@@ -105,6 +114,9 @@ impl ColorTheme {
             preview_border: Color::Rgb(30, 102, 245),
             scrollbar_thumb: Color::Rgb(156, 160, 176),
             scrollbar_track: Color::Rgb(220, 224, 232),
+            tab: Color::Rgb(30, 102, 245),
+            tab_selected: Color::Rgb(64, 160, 43),
+            list_selected: Color::Rgb(220, 224, 232),
         }
     }
 
@@ -130,6 +142,9 @@ impl ColorTheme {
             ComponentType::PreviewBorder => self.preview_border,
             ComponentType::ScrollbarThumb => self.scrollbar_thumb,
             ComponentType::ScrollbarTrack => self.scrollbar_track,
+            ComponentType::Tab => self.tab,
+            ComponentType::TabSelected => self.tab_selected,
+            ComponentType::ListSelected => self.list_selected,
         }
     }
 
@@ -145,6 +160,9 @@ impl ColorTheme {
             ComponentType::ChatUser => Style::default().fg(color).add_modifier(Modifier::BOLD),
             ComponentType::ChatAssistant => Style::default().fg(color),
             ComponentType::ChatSystem => Style::default().fg(color).add_modifier(Modifier::ITALIC),
+            ComponentType::Tab => Style::default().fg(color),
+            ComponentType::TabSelected => Style::default().fg(color).add_modifier(Modifier::BOLD),
+            ComponentType::ListSelected => Style::default().bg(color),
             _ => Style::default().fg(color),
         }
     }

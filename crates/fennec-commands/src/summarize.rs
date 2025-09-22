@@ -4,6 +4,7 @@ use fennec_core::{
     command::{Capability, CommandPreview, CommandResult, PreviewAction},
     error::FennecError,
 };
+use fennec_memory::{MemoryFileService, MemoryService};
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -16,8 +17,10 @@ use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
 /// Arguments for the summarize command
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SummarizeArgs {
-    /// Target to summarize (file path, directory, or text content)
+    /// Target to summarize (file path, directory, text content, or session)
     pub target: String,
+    /// Type of summary to generate
+    pub summary_type: Option<SummaryType>,
     /// Whether target is a file/directory path (true) or text content (false)
     pub is_path: Option<bool>,
     /// Maximum lines to include in summary
@@ -26,11 +29,68 @@ pub struct SummarizeArgs {
     pub include_extensions: Option<Vec<String>>,
     /// Whether to include file structure in directory summaries
     pub include_structure: Option<bool>,
+    /// Output destination for the summary
+    pub output_destination: Option<OutputDestination>,
+    /// Summary depth level
+    pub depth_level: Option<SummaryDepth>,
+    /// Time range for session summaries (in hours)
+    pub time_range_hours: Option<u32>,
+    /// Whether to save summary to memory files
+    pub save_to_memory: Option<bool>,
+    /// Tags to associate with memory file (if saved)
+    pub memory_tags: Option<Vec<String>>,
 }
 
-/// Summarize command for creating summaries of files, directories, or text
+/// Types of summaries that can be generated
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SummaryType {
+    /// Summary of files or directories
+    File,
+    /// Summary of a session's conversation and commands
+    Session,
+    /// Summary of project state and progress
+    Project,
+    /// Summary of recent commands and their outcomes
+    Commands,
+    /// Summary of text content
+    Text,
+}
+
+/// Output destinations for summaries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum OutputDestination {
+    /// Output to console only
+    Console,
+    /// Save to memory file
+    MemoryFile(String), // filename
+    /// Update existing progress.md file
+    ProgressFile,
+    /// Save to custom file path
+    CustomFile(String),
+    /// Both console and memory file
+    Both(String), // memory filename
+}
+
+/// Depth levels for summaries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SummaryDepth {
+    /// Brief, high-level summary
+    Brief,
+    /// Standard detail level
+    Standard,
+    /// Detailed analysis with insights
+    Detailed,
+    /// Comprehensive analysis with recommendations
+    Comprehensive,
+}
+
+/// Enhanced summarize command for creating summaries of files, directories, sessions, or text
 pub struct SummarizeCommand {
     descriptor: CommandDescriptor,
+    #[allow(dead_code)]
+    memory_service: Option<MemoryService>,
+    #[allow(dead_code)]
+    memory_file_service: Option<MemoryFileService>,
 }
 
 impl SummarizeCommand {
@@ -38,16 +98,41 @@ impl SummarizeCommand {
         Self {
             descriptor: CommandDescriptor {
                 name: "summarize".to_string(),
-                description: "Generate summaries of files, directories, or text content"
+                description: "Generate enhanced summaries of files, directories, sessions, or text content with memory integration"
                     .to_string(),
-                version: "1.0.0".to_string(),
+                version: "2.0.0".to_string(),
                 author: Some("Fennec Core".to_string()),
                 capabilities_required: vec![Capability::ReadFile],
                 sandbox_level_required: SandboxLevel::ReadOnly,
                 supports_preview: true,
                 supports_dry_run: false,
             },
+            memory_service: None,
+            memory_file_service: None,
         }
+    }
+
+    /// Create summarize command with memory services
+    #[allow(dead_code)]
+    pub async fn with_memory_services() -> Result<Self> {
+        let memory_service = MemoryService::new().await?;
+        let memory_file_service = MemoryFileService::new()?;
+
+        Ok(Self {
+            descriptor: CommandDescriptor {
+                name: "summarize".to_string(),
+                description: "Generate enhanced summaries of files, directories, sessions, or text content with memory integration"
+                    .to_string(),
+                version: "2.0.0".to_string(),
+                author: Some("Fennec Core".to_string()),
+                capabilities_required: vec![Capability::ReadFile],
+                sandbox_level_required: SandboxLevel::ReadOnly,
+                supports_preview: true,
+                supports_dry_run: false,
+            },
+            memory_service: Some(memory_service),
+            memory_file_service: Some(memory_file_service),
+        })
     }
 
     /// Generate summary based on the target type
@@ -266,6 +351,18 @@ impl SummarizeCommand {
         }
 
         Ok(summary.join("\n"))
+    }
+}
+
+/// Helper function to convert SummaryType to string
+#[allow(dead_code)]
+fn summary_type_to_string(summary_type: &SummaryType) -> &str {
+    match summary_type {
+        SummaryType::File => "File",
+        SummaryType::Session => "Session",
+        SummaryType::Project => "Project",
+        SummaryType::Commands => "Commands",
+        SummaryType::Text => "Text",
     }
 }
 

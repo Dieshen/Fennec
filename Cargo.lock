@@ -456,6 +456,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-subscriber",
  "uuid",
  "walkdir",
 ]
@@ -533,7 +534,9 @@ dependencies = [
  "anyhow",
  "chrono",
  "crossterm",
+ "fennec-commands",
  "fennec-core",
+ "fennec-memory",
  "fennec-orchestration",
  "fennec-security",
  "ratatui",
@@ -543,6 +546,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
