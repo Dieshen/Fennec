@@ -62,11 +62,17 @@ pub struct App {
 }
 
 impl App {
-    /// Create a new application instance (legacy method for backward compatibility)
-    pub async fn new(session_manager: SessionManager, sandbox_level: SandboxLevel) -> Result<Self> {
-        info!("Initializing Fennec TUI application (legacy mode)");
-        warn!("Using legacy constructor - security features may be limited");
-
+    /// Initialize terminal and basic components (shared between constructors)
+    fn init_terminal_and_components() -> Result<(
+        Terminal<CrosstermBackend<Stdout>>,
+        EventHandler,
+        ThemeManager,
+        LayoutManager,
+        ChatView,
+        InputField,
+        StatusBar,
+        PreviewPanel,
+    )> {
         // Initialize terminal
         enable_raw_mode()?;
         let mut stdout = io::stdout();
@@ -77,16 +83,44 @@ impl App {
         // Initialize event handling
         let event_handler = EventHandler::new(Duration::from_millis(250));
 
-        // Spawn background event listener
-        spawn_event_listener(event_handler.sender());
-
         // Initialize managers and components
         let theme_manager = ThemeManager::new();
         let layout_manager = LayoutManager::default();
         let chat_view = ChatView::new();
         let input_field = InputField::new();
-        let mut status_bar = StatusBar::new();
+        let status_bar = StatusBar::new();
         let preview_panel = PreviewPanel::new();
+
+        Ok((
+            terminal,
+            event_handler,
+            theme_manager,
+            layout_manager,
+            chat_view,
+            input_field,
+            status_bar,
+            preview_panel,
+        ))
+    }
+
+    /// Create a new application instance (legacy method for backward compatibility)
+    pub async fn new(session_manager: SessionManager, sandbox_level: SandboxLevel) -> Result<Self> {
+        info!("Initializing Fennec TUI application (legacy mode)");
+        warn!("Using legacy constructor - security features may be limited");
+
+        let (
+            terminal,
+            event_handler,
+            theme_manager,
+            layout_manager,
+            chat_view,
+            input_field,
+            mut status_bar,
+            preview_panel,
+        ) = Self::init_terminal_and_components()?;
+
+        // Spawn background event listener (ONLY ONCE)
+        spawn_event_listener(event_handler.sender());
 
         // Setup initial status bar
         Self::update_status_bar(&mut status_bar, InputMode::Normal, &sandbox_level, 0);
@@ -123,26 +157,19 @@ impl App {
         info!("Workspace: {}", sandbox_policy.workspace_path().display());
         info!("Approval required: {}", sandbox_policy.requires_approval());
 
-        // Initialize terminal
-        enable_raw_mode()?;
-        let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-        let backend = CrosstermBackend::new(stdout);
-        let terminal = Terminal::new(backend)?;
+        let (
+            terminal,
+            event_handler,
+            theme_manager,
+            layout_manager,
+            chat_view,
+            input_field,
+            mut status_bar,
+            preview_panel,
+        ) = Self::init_terminal_and_components()?;
 
-        // Initialize event handling
-        let event_handler = EventHandler::new(Duration::from_millis(250));
-
-        // Spawn background event listener
+        // Spawn background event listener (ONLY ONCE)
         spawn_event_listener(event_handler.sender());
-
-        // Initialize managers and components
-        let theme_manager = ThemeManager::new();
-        let layout_manager = LayoutManager::default();
-        let chat_view = ChatView::new();
-        let input_field = InputField::new();
-        let mut status_bar = StatusBar::new();
-        let preview_panel = PreviewPanel::new();
 
         // Setup initial status bar with security info
         Self::update_status_bar_with_security(

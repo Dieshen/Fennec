@@ -1,4 +1,5 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -322,9 +323,23 @@ impl EventHandler {
     }
 }
 
+/// Global flag to prevent multiple event listeners from being spawned
+static EVENT_LISTENER_SPAWNED: AtomicBool = AtomicBool::new(false);
+
 /// Spawns a background task to capture terminal events
+/// This function ensures that only one event listener is running at a time
 pub fn spawn_event_listener(sender: mpsc::UnboundedSender<AppEvent>) {
+    // Check if an event listener is already running
+    if EVENT_LISTENER_SPAWNED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        tracing::warn!("Event listener already spawned, skipping duplicate spawn");
+        return;
+    }
+
     tokio::task::spawn_blocking(move || {
+        tracing::debug!("Starting terminal event listener");
         loop {
             match crossterm::event::read() {
                 Ok(Event::Resize(w, h)) => {
@@ -346,6 +361,10 @@ pub fn spawn_event_listener(sender: mpsc::UnboundedSender<AppEvent>) {
                 }
             }
         }
+
+        // Reset the flag when the event listener exits
+        EVENT_LISTENER_SPAWNED.store(false, Ordering::SeqCst);
+        tracing::debug!("Terminal event listener stopped");
     });
 }
 
