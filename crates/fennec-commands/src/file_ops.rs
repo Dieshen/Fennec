@@ -101,9 +101,10 @@ impl FileOperations {
         // Security checks based on sandbox level
         match sandbox_level {
             SandboxLevel::ReadOnly => {
-                return Err(FennecError::Security {
-                    message: "Cannot modify files in read-only mode".to_string(),
-                }
+                return Err(FennecError::Security(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Cannot modify files in read-only mode",
+                )))
                 .into());
             }
             SandboxLevel::WorkspaceWrite => {
@@ -116,9 +117,10 @@ impl FileOperations {
 
                 let canonical_workspace = self.normalize_path(&workspace)?;
                 if !canonical_path.starts_with(&canonical_workspace) {
-                    return Err(FennecError::Security {
-                        message: "Cannot edit files outside the current workspace".to_string(),
-                    }
+                    return Err(FennecError::Security(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Cannot edit files outside the current workspace",
+                    )))
                     .into());
                 }
             }
@@ -136,9 +138,10 @@ impl FileOperations {
         // Validate parent directory exists or can be created
         if let Some(parent) = canonical_path.parent() {
             if !parent.exists() {
-                return Err(FennecError::Security {
-                    message: format!("Parent directory does not exist: {}", parent.display()),
-                }
+                return Err(FennecError::Security(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Parent directory does not exist: {}", parent.display()),
+                )))
                 .into());
             }
         }
@@ -156,9 +159,10 @@ impl FileOperations {
             match component {
                 std::path::Component::ParentDir => {
                     if !normalized.pop() {
-                        return Err(FennecError::Security {
-                            message: "Path traversal attempt detected".to_string(),
-                        }
+                        return Err(FennecError::Security(Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Path traversal attempt detected",
+                        )))
                         .into());
                     }
                 }
@@ -192,9 +196,10 @@ impl FileOperations {
 
         for dangerous in &dangerous_paths {
             if path.starts_with(dangerous) {
-                return Err(FennecError::Security {
-                    message: format!("Cannot edit files in system directory: {}", dangerous),
-                }
+                return Err(FennecError::Security(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Cannot edit files in system directory: {}", dangerous),
+                )))
                 .into());
             }
         }
@@ -211,9 +216,10 @@ impl FileOperations {
 
         for pattern in &dangerous_patterns {
             if path_str.contains(pattern) {
-                return Err(FennecError::Security {
-                    message: "Path traversal attempt detected".to_string(),
-                }
+                return Err(FennecError::Security(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Path traversal attempt detected",
+                )))
                 .into());
             }
         }
@@ -224,24 +230,31 @@ impl FileOperations {
     /// Safely read a file with encoding detection
     pub async fn safe_read_file(&self, path: &Path) -> Result<String> {
         // Check file size
-        let metadata = fs::metadata(path).await.map_err(|e| FennecError::Command {
-            message: format!("Failed to read file metadata {}: {}", path.display(), e),
+        let metadata = fs::metadata(path).await.map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to read file metadata {}: {}", path.display(), e),
+            )))
         })?;
 
         if metadata.len() > self.config.max_file_size as u64 {
-            return Err(FennecError::Command {
-                message: format!(
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
                     "File too large: {} bytes (max: {})",
                     metadata.len(),
                     self.config.max_file_size
                 ),
-            }
+            )))
             .into());
         }
 
         // Read the file as bytes first
-        let bytes = fs::read(path).await.map_err(|e| FennecError::Command {
-            message: format!("Failed to read file {}: {}", path.display(), e),
+        let bytes = fs::read(path).await.map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to read file {}: {}", path.display(), e),
+            )))
         })?;
 
         // Detect encoding if enabled
@@ -250,9 +263,10 @@ impl FileOperations {
         } else {
             // Default to UTF-8
             String::from_utf8(bytes).map_err(|e| {
-                FennecError::Command {
-                    message: format!("File {} is not valid UTF-8: {}", path.display(), e),
-                }
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("File {} is not valid UTF-8: {}", path.display(), e),
+                )))
                 .into()
             })
         }
@@ -263,13 +277,14 @@ impl FileOperations {
         // Check for UTF-8 BOM
         if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
             return String::from_utf8(bytes[3..].to_vec()).map_err(|e| {
-                FennecError::Command {
-                    message: format!(
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
                         "File {} has UTF-8 BOM but invalid UTF-8 content: {}",
                         path.display(),
                         e
                     ),
-                }
+                )))
                 .into()
             });
         }
@@ -277,26 +292,28 @@ impl FileOperations {
         // Check for UTF-16 BOMs
         if bytes.starts_with(&[0xFF, 0xFE]) {
             return <String as StringFromUtf16>::from_utf16le(&bytes[2..]).map_err(|e| {
-                FennecError::Command {
-                    message: format!(
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
                         "File {} has UTF-16LE BOM but invalid content: {}",
                         path.display(),
                         e
                     ),
-                }
+                )))
                 .into()
             });
         }
 
         if bytes.starts_with(&[0xFE, 0xFF]) {
             return <String as StringFromUtf16>::from_utf16be(&bytes[2..]).map_err(|e| {
-                FennecError::Command {
-                    message: format!(
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
                         "File {} has UTF-16BE BOM but invalid content: {}",
                         path.display(),
                         e
                     ),
-                }
+                )))
                 .into()
             });
         }
@@ -311,12 +328,13 @@ impl FileOperations {
             .iter()
             .any(|&b| b == 0 || (b < 32 && b != 9 && b != 10 && b != 13))
         {
-            return Err(FennecError::Command {
-                message: format!(
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
                     "File {} appears to be binary, cannot edit as text",
                     path.display()
                 ),
-            }
+            )))
             .into());
         }
 
@@ -327,9 +345,10 @@ impl FileOperations {
     /// Create a backup of a file
     pub async fn create_backup(&self, path: &Path) -> Result<PathBuf> {
         if !path.exists() {
-            return Err(FennecError::Command {
-                message: format!("Cannot backup non-existent file: {}", path.display()),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Cannot backup non-existent file: {}", path.display()),
+            )))
             .into());
         }
 
@@ -337,19 +356,23 @@ impl FileOperations {
             backup_dir.clone()
         } else {
             path.parent()
-                .ok_or_else(|| FennecError::Command {
-                    message: "Cannot determine backup directory".to_string(),
+                .ok_or_else(|| {
+                    FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Cannot determine backup directory",
+                    )))
                 })?
                 .to_path_buf()
         };
 
         // Create backup directory if it doesn't exist
         if !backup_dir.exists() {
-            fs::create_dir_all(&backup_dir)
-                .await
-                .map_err(|e| FennecError::Command {
-                    message: format!("Failed to create backup directory: {}", e),
-                })?;
+            fs::create_dir_all(&backup_dir).await.map_err(|e| {
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to create backup directory: {}", e),
+                )))
+            })?;
         }
 
         // Generate backup filename with timestamp and UUID for uniqueness
@@ -357,8 +380,11 @@ impl FileOperations {
         let uuid = Uuid::new_v4().simple();
         let file_name = path
             .file_name()
-            .ok_or_else(|| FennecError::Command {
-                message: "Invalid file name for backup".to_string(),
+            .ok_or_else(|| {
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Invalid file name for backup",
+                )))
             })?
             .to_string_lossy();
 
@@ -366,11 +392,12 @@ impl FileOperations {
         let backup_path = backup_dir.join(backup_name);
 
         // Copy the file
-        fs::copy(path, &backup_path)
-            .await
-            .map_err(|e| FennecError::Command {
-                message: format!("Failed to create backup: {}", e),
-            })?;
+        fs::copy(path, &backup_path).await.map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to create backup: {}", e),
+            )))
+        })?;
 
         Ok(backup_path)
     }
@@ -379,11 +406,12 @@ impl FileOperations {
     pub async fn atomic_write_file(&self, path: &Path, content: &str) -> Result<usize> {
         if !self.config.atomic_writes {
             // Direct write (less safe but simpler)
-            fs::write(path, content)
-                .await
-                .map_err(|e| FennecError::Command {
-                    message: format!("Failed to write file {}: {}", path.display(), e),
-                })?;
+            fs::write(path, content).await.map_err(|e| {
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to write file {}: {}", path.display(), e),
+                )))
+            })?;
             return Ok(content.len());
         }
 
@@ -391,11 +419,12 @@ impl FileOperations {
         let temp_path = path.with_extension(format!("tmp.{}", Uuid::new_v4().simple()));
 
         // Write to temporary file first
-        fs::write(&temp_path, content)
-            .await
-            .map_err(|e| FennecError::Command {
-                message: format!("Failed to write temporary file: {}", e),
-            })?;
+        fs::write(&temp_path, content).await.map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to write temporary file: {}", e),
+            )))
+        })?;
 
         // Rename to final destination (atomic on most filesystems)
         match fs::rename(&temp_path, path).await {
@@ -403,9 +432,10 @@ impl FileOperations {
             Err(e) => {
                 // Clean up temp file on failure
                 let _ = fs::remove_file(&temp_path).await;
-                return Err(FennecError::Command {
-                    message: format!("Failed to rename temporary file: {}", e),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to rename temporary file: {}", e),
+                )))
                 .into());
             }
         }
@@ -447,9 +477,10 @@ impl FileOperations {
                 content,
             } => {
                 if *line_number == 0 {
-                    return Err(FennecError::Command {
-                        message: "Line numbers must be 1-based (start from 1)".to_string(),
-                    }
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Line numbers must be 1-based (start from 1)",
+                    )))
                     .into());
                 }
 
@@ -457,13 +488,14 @@ impl FileOperations {
                 let insert_index = line_number.saturating_sub(1);
 
                 if insert_index > lines.len() {
-                    return Err(FennecError::Command {
-                        message: format!(
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
                             "Line {} is beyond file length ({})",
                             line_number,
                             lines.len()
                         ),
-                    }
+                    )))
                     .into());
                 }
 
@@ -473,9 +505,10 @@ impl FileOperations {
 
             EditStrategy::SearchReplace { search, replace } => {
                 if search.is_empty() {
-                    return Err(FennecError::Command {
-                        message: "Search string cannot be empty".to_string(),
-                    }
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Search string cannot be empty",
+                    )))
                     .into());
                 }
                 Ok(original_content.replace(search, replace))
@@ -487,9 +520,10 @@ impl FileOperations {
                 content,
             } => {
                 if *start == 0 {
-                    return Err(FennecError::Command {
-                        message: "Line numbers must be 1-based (start from 1)".to_string(),
-                    }
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Line numbers must be 1-based (start from 1)",
+                    )))
                     .into());
                 }
 
@@ -498,16 +532,18 @@ impl FileOperations {
                 let end_idx = end.unwrap_or(*start).saturating_sub(1);
 
                 if start_idx >= lines.len() {
-                    return Err(FennecError::Command {
-                        message: format!("Line {} is beyond file length ({})", start, lines.len()),
-                    }
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Line {} is beyond file length ({})", start, lines.len()),
+                    )))
                     .into());
                 }
 
                 if end_idx < start_idx {
-                    return Err(FennecError::Command {
-                        message: "End line must be greater than or equal to start line".to_string(),
-                    }
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "End line must be greater than or equal to start line",
+                    )))
                     .into());
                 }
 
@@ -538,20 +574,22 @@ impl FileOperations {
         } else if request.create_if_missing {
             // Create parent directories if needed
             if let Some(parent) = validated_path.parent() {
-                fs::create_dir_all(parent)
-                    .await
-                    .map_err(|e| FennecError::Command {
-                        message: format!("Failed to create directory {}: {}", parent.display(), e),
-                    })?;
+                fs::create_dir_all(parent).await.map_err(|e| {
+                    FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Failed to create directory {}: {}", parent.display(), e),
+                    )))
+                })?;
             }
             String::new()
         } else {
-            return Err(FennecError::Command {
-                message: format!(
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
                     "File {} does not exist and create_if_missing is false",
                     validated_path.display()
                 ),
-            }
+            )))
             .into());
         };
 
@@ -619,9 +657,10 @@ trait StringFromUtf16 {
 impl StringFromUtf16 for String {
     fn from_utf16le(bytes: &[u8]) -> Result<String> {
         if bytes.len() % 2 != 0 {
-            return Err(FennecError::Command {
-                message: "Invalid UTF-16LE data: odd number of bytes".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid UTF-16LE data: odd number of bytes",
+            )))
             .into());
         }
 
@@ -631,18 +670,20 @@ impl StringFromUtf16 for String {
             .collect();
 
         String::from_utf16(&utf16_data).map_err(|e| {
-            FennecError::Command {
-                message: format!("Invalid UTF-16LE content: {}", e),
-            }
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid UTF-16LE content: {}", e),
+            )))
             .into()
         })
     }
 
     fn from_utf16be(bytes: &[u8]) -> Result<String> {
         if bytes.len() % 2 != 0 {
-            return Err(FennecError::Command {
-                message: "Invalid UTF-16BE data: odd number of bytes".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid UTF-16BE data: odd number of bytes",
+            )))
             .into());
         }
 
@@ -652,9 +693,10 @@ impl StringFromUtf16 for String {
             .collect();
 
         String::from_utf16(&utf16_data).map_err(|e| {
-            FennecError::Command {
-                message: format!("Invalid UTF-16BE content: {}", e),
-            }
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid UTF-16BE content: {}", e),
+            )))
             .into()
         })
     }

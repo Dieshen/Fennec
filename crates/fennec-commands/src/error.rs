@@ -1,4 +1,4 @@
-use fennec_core::{ErrorCategory, ErrorInfo, ErrorSeverity, RecoveryAction};
+use fennec_core::error::{ErrorCategory, ErrorInfo, ErrorSeverity, RecoveryAction};
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, CommandError>;
@@ -128,13 +128,13 @@ pub enum CommandError {
 
     // Integration errors
     #[error("Memory service error: {0}")]
-    MemoryService(#[from] Box<dyn std::error::Error + Send + Sync>),
+    MemoryService(Box<dyn std::error::Error + Send + Sync>),
 
     #[error("Provider service error: {0}")]
-    ProviderService(#[from] Box<dyn std::error::Error + Send + Sync>),
+    ProviderService(Box<dyn std::error::Error + Send + Sync>),
 
     #[error("Security service error: {0}")]
-    SecurityService(#[from] Box<dyn std::error::Error + Send + Sync>),
+    SecurityService(Box<dyn std::error::Error + Send + Sync>),
 
     // IO errors (wrapped for better context)
     #[error("IO operation failed: {operation} - {source}")]
@@ -360,11 +360,15 @@ impl ErrorInfo for CommandError {
                 ))]
             }
 
-            CommandError::ResourceLimitExceeded { resource, maximum } => {
+            CommandError::ResourceLimitExceeded {
+                resource,
+                current,
+                maximum,
+            } => {
                 vec![
                     RecoveryAction::ManualAction(format!(
-                        "Reduce {} usage (current limit: {})",
-                        resource, maximum
+                        "Reduce {} usage (current: {}, limit: {})",
+                        resource, current, maximum
                     )),
                     RecoveryAction::CheckConfiguration("Increase resource limits".to_string()),
                 ]

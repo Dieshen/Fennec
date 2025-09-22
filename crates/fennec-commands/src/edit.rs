@@ -195,12 +195,13 @@ impl EditCommand {
             });
             format!("Create new file: {}", args.file_path)
         } else {
-            return Err(FennecError::Command {
-                message: format!(
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
                     "File {} does not exist and create_if_missing is false",
                     args.file_path
                 ),
-            }
+            )))
             .into());
         };
 
@@ -216,9 +217,10 @@ impl EditCommand {
     async fn perform_edit(&self, args: &EditArgs, context: &CommandContext) -> Result<String> {
         // Check for cancellation
         if context.cancellation_token.is_cancelled() {
-            return Err(FennecError::Command {
-                message: "Edit operation was cancelled".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Edit operation was cancelled",
+            )))
             .into());
         }
 
@@ -248,12 +250,13 @@ impl EditCommand {
             } else if request.create_if_missing {
                 String::new()
             } else {
-                return Err(FennecError::Command {
-                    message: format!(
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
                         "File {} does not exist and create_if_missing is false",
                         validated_path.display()
                     ),
-                }
+                )))
                 .into());
             };
 
@@ -309,10 +312,12 @@ impl CommandExecutor for EditCommand {
         args: &serde_json::Value,
         context: &CommandContext,
     ) -> Result<CommandPreview> {
-        let args: EditArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid edit arguments: {}", e),
-            })?;
+        let args: EditArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid edit arguments: {}", e),
+            )))
+        })?;
 
         self.generate_preview(&args, context).await
     }
@@ -322,10 +327,12 @@ impl CommandExecutor for EditCommand {
         args: &serde_json::Value,
         context: &CommandContext,
     ) -> Result<CommandResult> {
-        let args: EditArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid edit arguments: {}", e),
-            })?;
+        let args: EditArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid edit arguments: {}", e),
+            )))
+        })?;
 
         match self.perform_edit(&args, context).await {
             Ok(output) => Ok(CommandResult {
@@ -344,15 +351,18 @@ impl CommandExecutor for EditCommand {
     }
 
     fn validate_args(&self, args: &serde_json::Value) -> Result<()> {
-        let args: EditArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid edit arguments: {}", e),
-            })?;
+        let args: EditArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid edit arguments: {}", e),
+            )))
+        })?;
 
         if args.file_path.trim().is_empty() {
-            return Err(FennecError::Command {
-                message: "File path cannot be empty".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "File path cannot be empty",
+            )))
             .into());
         }
 
@@ -360,41 +370,42 @@ impl CommandExecutor for EditCommand {
         match &args.strategy {
             EditStrategyArgs::Replace { content } => {
                 if content.is_empty() {
-                    return Err(FennecError::Command {
-                        message: "Replacement content cannot be empty (use empty string \"\" for clearing file)".to_string(),
-                    }
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Replacement content cannot be empty (use empty string \"\" for clearing file)")))
                     .into());
                 }
             }
             EditStrategyArgs::InsertAtLine { line_number, .. } => {
                 if *line_number == 0 {
-                    return Err(FennecError::Command {
-                        message: "Line numbers must be 1-based (start from 1)".to_string(),
-                    }
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Line numbers must be 1-based (start from 1)",
+                    )))
                     .into());
                 }
             }
             EditStrategyArgs::SearchReplace { search, .. } => {
                 if search.is_empty() {
-                    return Err(FennecError::Command {
-                        message: "Search string cannot be empty".to_string(),
-                    }
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Search string cannot be empty",
+                    )))
                     .into());
                 }
             }
             EditStrategyArgs::LineRange { start, end, .. } => {
                 if *start == 0 {
-                    return Err(FennecError::Command {
-                        message: "Line numbers must be 1-based (start from 1)".to_string(),
-                    }
+                    return Err(FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Line numbers must be 1-based (start from 1)",
+                    )))
                     .into());
                 }
                 if let Some(end_line) = end {
                     if *end_line < *start {
-                        return Err(FennecError::Command {
-                            message: "End line must be greater than or equal to start line"
-                                .to_string(),
-                        }
+                        return Err(FennecError::Command(Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "End line must be greater than or equal to start line",
+                        )))
                         .into());
                     }
                 }

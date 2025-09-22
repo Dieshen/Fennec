@@ -70,9 +70,10 @@ impl RunCommand {
 
         for dangerous in &dangerous_commands {
             if command.contains(dangerous) {
-                return Err(FennecError::Security {
-                    message: format!("Dangerous command detected: {}", dangerous),
-                }
+                return Err(FennecError::Security(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Dangerous command detected: {}", dangerous),
+                )))
                 .into());
             }
         }
@@ -80,9 +81,10 @@ impl RunCommand {
         // Additional restrictions based on sandbox level
         match context.sandbox_level {
             SandboxLevel::ReadOnly => {
-                return Err(FennecError::Security {
-                    message: "Cannot execute commands in read-only mode".to_string(),
-                }
+                return Err(FennecError::Security(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Cannot execute commands in read-only mode",
+                )))
                 .into());
             }
             SandboxLevel::WorkspaceWrite => {
@@ -90,9 +92,10 @@ impl RunCommand {
                 let restricted_commands = ["cd /", "cd ~", "cd .."];
                 for restricted in &restricted_commands {
                     if command.starts_with(restricted) {
-                        return Err(FennecError::Security {
-                            message: "Command restricted to workspace only".to_string(),
-                        }
+                        return Err(FennecError::Security(Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Command restricted to workspace only",
+                        )))
                         .into());
                     }
                 }
@@ -116,9 +119,10 @@ impl RunCommand {
         // Parse command and arguments
         let parts: Vec<&str> = args.command.split_whitespace().collect();
         if parts.is_empty() {
-            return Err(FennecError::Command {
-                message: "Empty command".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Empty command",
+            )))
             .into());
         }
 
@@ -152,18 +156,25 @@ impl RunCommand {
 
         let output = tokio::time::timeout(timeout, cmd.output())
             .await
-            .map_err(|_| FennecError::Command {
-                message: format!("Command timed out after {} seconds", timeout.as_secs()),
+            .map_err(|_| {
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Command timed out after {} seconds", timeout.as_secs()),
+                )))
             })?
-            .map_err(|e| FennecError::Command {
-                message: format!("Failed to execute command: {}", e),
+            .map_err(|e| {
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to execute command: {}", e),
+                )))
             })?;
 
         // Check for cancellation
         if context.cancellation_token.is_cancelled() {
-            return Err(FennecError::Command {
-                message: "Command execution was cancelled".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Command execution was cancelled",
+            )))
             .into());
         }
 
@@ -184,12 +195,13 @@ impl RunCommand {
         }
 
         if !output.status.success() {
-            return Err(FennecError::Command {
-                message: format!(
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
                     "Command failed with exit code: {}",
                     output.status.code().unwrap_or(-1)
                 ),
-            }
+            )))
             .into());
         }
 
@@ -208,10 +220,12 @@ impl CommandExecutor for RunCommand {
         args: &serde_json::Value,
         context: &CommandContext,
     ) -> Result<CommandPreview> {
-        let args: RunArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid run arguments: {}", e),
-            })?;
+        let args: RunArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid run arguments: {}", e),
+            )))
+        })?;
 
         self.validate_command(&args.command, context)?;
 
@@ -230,10 +244,12 @@ impl CommandExecutor for RunCommand {
         args: &serde_json::Value,
         context: &CommandContext,
     ) -> Result<CommandResult> {
-        let args: RunArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid run arguments: {}", e),
-            })?;
+        let args: RunArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid run arguments: {}", e),
+            )))
+        })?;
 
         match self.execute_command(&args, context).await {
             Ok(output) => Ok(CommandResult {
@@ -252,24 +268,28 @@ impl CommandExecutor for RunCommand {
     }
 
     fn validate_args(&self, args: &serde_json::Value) -> Result<()> {
-        let args: RunArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid run arguments: {}", e),
-            })?;
+        let args: RunArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid run arguments: {}", e),
+            )))
+        })?;
 
         if args.command.trim().is_empty() {
-            return Err(FennecError::Command {
-                message: "Command cannot be empty".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Command cannot be empty",
+            )))
             .into());
         }
 
         if let Some(timeout) = args.timeout_seconds {
             if timeout > 300 {
                 // 5 minutes max
-                return Err(FennecError::Command {
-                    message: "Timeout cannot exceed 300 seconds".to_string(),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Timeout cannot exceed 300 seconds",
+                )))
                 .into());
             }
         }

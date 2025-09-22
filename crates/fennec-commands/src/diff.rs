@@ -57,28 +57,32 @@ impl DiffCommand {
             let right_path = Path::new(&args.right);
 
             let left_content = if left_path.exists() {
-                fs::read_to_string(left_path)
-                    .await
-                    .map_err(|e| FennecError::Command {
-                        message: format!("Failed to read {}: {}", args.left, e),
-                    })?
+                fs::read_to_string(left_path).await.map_err(|e| {
+                    FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Failed to read {}: {}", args.left, e),
+                    )))
+                })?
             } else {
-                return Err(FennecError::Command {
-                    message: format!("File not found: {}", args.left),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("File not found: {}", args.left),
+                )))
                 .into());
             };
 
             let right_content = if right_path.exists() {
-                fs::read_to_string(right_path)
-                    .await
-                    .map_err(|e| FennecError::Command {
-                        message: format!("Failed to read {}: {}", args.right, e),
-                    })?
+                fs::read_to_string(right_path).await.map_err(|e| {
+                    FennecError::Command(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Failed to read {}: {}", args.right, e),
+                    )))
+                })?
             } else {
-                return Err(FennecError::Command {
-                    message: format!("File not found: {}", args.right),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("File not found: {}", args.right),
+                )))
                 .into());
             };
 
@@ -167,9 +171,10 @@ impl DiffCommand {
 
                 Ok(output.join("\n"))
             }
-            _ => Err(FennecError::Command {
-                message: format!("Unknown diff format: {}", format),
-            }
+            _ => Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Unknown diff format: {}", format),
+            )))
             .into()),
         }
     }
@@ -186,10 +191,12 @@ impl CommandExecutor for DiffCommand {
         args: &serde_json::Value,
         _context: &CommandContext,
     ) -> Result<CommandPreview> {
-        let args: DiffArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid diff arguments: {}", e),
-            })?;
+        let args: DiffArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid diff arguments: {}", e),
+            )))
+        })?;
 
         let mut actions = Vec::new();
 
@@ -215,10 +222,12 @@ impl CommandExecutor for DiffCommand {
         args: &serde_json::Value,
         context: &CommandContext,
     ) -> Result<CommandResult> {
-        let args: DiffArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid diff arguments: {}", e),
-            })?;
+        let args: DiffArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid diff arguments: {}", e),
+            )))
+        })?;
 
         match self.generate_diff(&args, context).await {
             Ok(output) => Ok(CommandResult {
@@ -237,23 +246,27 @@ impl CommandExecutor for DiffCommand {
     }
 
     fn validate_args(&self, args: &serde_json::Value) -> Result<()> {
-        let args: DiffArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid diff arguments: {}", e),
-            })?;
+        let args: DiffArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid diff arguments: {}", e),
+            )))
+        })?;
 
         if args.left.trim().is_empty() || args.right.trim().is_empty() {
-            return Err(FennecError::Command {
-                message: "Both left and right inputs must be provided".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Both left and right inputs must be provided",
+            )))
             .into());
         }
 
         if let Some(ref format) = args.format {
             if !matches!(format.as_str(), "unified" | "side-by-side" | "brief") {
-                return Err(FennecError::Command {
-                    message: "Format must be one of: unified, side-by-side, brief".to_string(),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Format must be one of: unified, side-by-side, brief",
+                )))
                 .into());
             }
         }

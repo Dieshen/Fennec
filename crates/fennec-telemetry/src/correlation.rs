@@ -272,7 +272,7 @@ where
 {
     fn on_new_span(
         &self,
-        attrs: &tracing::span::Attributes<'_>,
+        _attrs: &tracing::span::Attributes<'_>,
         id: &tracing::span::Id,
         ctx: Context<'_, S>,
     ) {
@@ -551,7 +551,7 @@ mod tests {
         let tracker = RequestTracker::new(layer);
 
         {
-            let mut guard = tracker.start_request("test_operation".to_string()).await;
+            let guard = tracker.start_request("test_operation".to_string()).await;
 
             // Verify the request is being tracked
             let context = guard.get_context().await.unwrap();

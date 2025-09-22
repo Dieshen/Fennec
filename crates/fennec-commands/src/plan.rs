@@ -213,10 +213,12 @@ impl CommandExecutor for PlanCommand {
         args: &serde_json::Value,
         _context: &CommandContext,
     ) -> Result<CommandPreview> {
-        let args: PlanArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid plan arguments: {}", e),
-            })?;
+        let args: PlanArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid plan arguments: {}", e),
+            )))
+        })?;
 
         Ok(CommandPreview {
             command_id: Uuid::new_v4(),
@@ -233,10 +235,12 @@ impl CommandExecutor for PlanCommand {
         args: &serde_json::Value,
         context: &CommandContext,
     ) -> Result<CommandResult> {
-        let args: PlanArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid plan arguments: {}", e),
-            })?;
+        let args: PlanArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid plan arguments: {}", e),
+            )))
+        })?;
 
         // Check for cancellation
         if context.cancellation_token.is_cancelled() {
@@ -265,23 +269,27 @@ impl CommandExecutor for PlanCommand {
     }
 
     fn validate_args(&self, args: &serde_json::Value) -> Result<()> {
-        let args: PlanArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid plan arguments: {}", e),
-            })?;
+        let args: PlanArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid plan arguments: {}", e),
+            )))
+        })?;
 
         if args.task.trim().is_empty() {
-            return Err(FennecError::Command {
-                message: "Task description cannot be empty".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Task description cannot be empty",
+            )))
             .into());
         }
 
         if let Some(ref complexity) = args.complexity {
             if !matches!(complexity.as_str(), "simple" | "moderate" | "complex") {
-                return Err(FennecError::Command {
-                    message: "Complexity must be one of: simple, moderate, complex".to_string(),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Complexity must be one of: simple, moderate, complex",
+                )))
                 .into());
             }
         }

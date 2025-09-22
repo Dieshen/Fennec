@@ -6,6 +6,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use fennec_core::{
+    error::{ErrorCategory, ErrorInfo, ErrorSeverity, RecoveryAction},
     session::Session,
     transcript::{MessageRole, Transcript},
     FennecError,
@@ -1179,7 +1180,7 @@ pub enum MemoryError {
     #[error("Memory file not found: '{path}'")]
     FileNotFound { path: String },
 
-    #[error("Failed to watch file '{path}': {reason}")]
+    #[error("Failed to watch file '{path}': {source}")]
     FileWatchFailed {
         path: String,
         #[source]
@@ -1233,8 +1234,8 @@ pub enum MemoryError {
     #[error("Memory injection failed: {context} - {reason}")]
     InjectionFailed { context: String, reason: String },
 
-    #[error("Context extraction failed: {source} - {reason}")]
-    ContextExtractionFailed { source: String, reason: String },
+    #[error("Context extraction failed: {context} - {reason}")]
+    ContextExtractionFailed { context: String, reason: String },
 
     // Serialization and data errors
     #[error("Serialization failed: {data_type} - {reason}")]
@@ -1282,8 +1283,8 @@ pub enum MemoryError {
     },
 }
 
-impl fennec_core::ErrorInfo for MemoryError {
-    fn category(&self) -> fennec_core::ErrorCategory {
+impl ErrorInfo for MemoryError {
+    fn category(&self) -> ErrorCategory {
         match self {
             // User errors
             MemoryError::SessionNotFound { .. }
@@ -1292,7 +1293,7 @@ impl fennec_core::ErrorInfo for MemoryError {
             | MemoryError::InvalidConfiguration { .. }
             | MemoryError::ConfigurationNotFound { .. }
             | MemoryError::AgentsConfigNotFound { .. }
-            | MemoryError::UnsupportedFileFormat { .. } => fennec_core::ErrorCategory::User,
+            | MemoryError::UnsupportedFileFormat { .. } => ErrorCategory::User,
 
             // System errors
             MemoryError::StorageInitFailed { .. }
@@ -1305,7 +1306,7 @@ impl fennec_core::ErrorInfo for MemoryError {
             | MemoryError::SessionLimitExceeded { .. }
             | MemoryError::MemoryLimitExceeded { .. }
             | MemoryError::ConcurrencyLimitExceeded { .. }
-            | MemoryError::Io { .. } => fennec_core::ErrorCategory::System,
+            | MemoryError::Io { .. } => ErrorCategory::System,
 
             // Internal errors
             MemoryError::SessionNotActive { .. }
@@ -1328,18 +1329,18 @@ impl fennec_core::ErrorInfo for MemoryError {
             | MemoryError::DataCorrupted { .. }
             | MemoryError::ServiceInitFailed { .. }
             | MemoryError::ServiceUnavailable { .. }
-            | MemoryError::OperationTimeout { .. } => fennec_core::ErrorCategory::Internal,
+            | MemoryError::OperationTimeout { .. } => ErrorCategory::Internal,
         }
     }
 
-    fn severity(&self) -> fennec_core::ErrorSeverity {
+    fn severity(&self) -> ErrorSeverity {
         match self {
             // Critical errors that affect system stability
             MemoryError::StorageCorrupted { .. }
             | MemoryError::IndexCorrupted { .. }
             | MemoryError::StorageCapacityExceeded { .. }
             | MemoryError::MemoryLimitExceeded { .. }
-            | MemoryError::DataCorrupted { .. } => fennec_core::ErrorSeverity::Critical,
+            | MemoryError::DataCorrupted { .. } => ErrorSeverity::Critical,
 
             // Errors that prevent operation but don't affect stability
             MemoryError::SessionLimitExceeded { .. }
@@ -1347,54 +1348,47 @@ impl fennec_core::ErrorInfo for MemoryError {
             | MemoryError::StorageInitFailed { .. }
             | MemoryError::IndexInitFailed { .. }
             | MemoryError::ServiceInitFailed { .. }
-            | MemoryError::ServiceUnavailable { .. } => fennec_core::ErrorSeverity::Error,
+            | MemoryError::ServiceUnavailable { .. } => ErrorSeverity::Error,
 
             // Warning-level errors that may indicate issues
             MemoryError::SearchTimeout { .. }
             | MemoryError::OperationTimeout { .. }
-            | MemoryError::FileWatchFailed { .. } => fennec_core::ErrorSeverity::Warning,
+            | MemoryError::FileWatchFailed { .. } => ErrorSeverity::Warning,
 
             // Standard errors
-            _ => fennec_core::ErrorSeverity::Error,
+            _ => ErrorSeverity::Error,
         }
     }
 
-    fn recovery_actions(&self) -> Vec<fennec_core::RecoveryAction> {
+    fn recovery_actions(&self) -> Vec<RecoveryAction> {
         match self {
             MemoryError::SessionNotFound { .. } => {
-                vec![fennec_core::RecoveryAction::ManualAction(
+                vec![RecoveryAction::ManualAction(
                     "Start a new session or check session ID".to_string(),
                 )]
             }
 
             MemoryError::StorageCorrupted { component, .. } => {
                 vec![
-                    fennec_core::RecoveryAction::ManualAction(format!(
+                    RecoveryAction::ManualAction(format!(
                         "Rebuild {} storage from backup",
                         component
                     )),
-                    fennec_core::RecoveryAction::ContactSupport(
-                        "Data recovery may be needed".to_string(),
-                    ),
+                    RecoveryAction::ContactSupport("Data recovery may be needed".to_string()),
                 ]
             }
 
             MemoryError::IndexCorrupted { component } => {
                 vec![
-                    fennec_core::RecoveryAction::ManualAction(format!(
-                        "Rebuild search index for {}",
-                        component
-                    )),
-                    fennec_core::RecoveryAction::RetryWithChanges(
-                        "Clear cache and restart".to_string(),
-                    ),
+                    RecoveryAction::ManualAction(format!("Rebuild search index for {}", component)),
+                    RecoveryAction::RetryWithChanges("Clear cache and restart".to_string()),
                 ]
             }
 
             MemoryError::SessionLimitExceeded { max, .. } => {
                 vec![
-                    fennec_core::RecoveryAction::ManualAction("Close unused sessions".to_string()),
-                    fennec_core::RecoveryAction::CheckConfiguration(format!(
+                    RecoveryAction::ManualAction("Close unused sessions".to_string()),
+                    RecoveryAction::CheckConfiguration(format!(
                         "Increase session limit (current: {})",
                         max
                     )),
@@ -1403,10 +1397,8 @@ impl fennec_core::ErrorInfo for MemoryError {
 
             MemoryError::StorageCapacityExceeded { limit_mb, .. } => {
                 vec![
-                    fennec_core::RecoveryAction::ManualAction(
-                        "Clean up old memory data".to_string(),
-                    ),
-                    fennec_core::RecoveryAction::CheckConfiguration(format!(
+                    RecoveryAction::ManualAction("Clean up old memory data".to_string()),
+                    RecoveryAction::CheckConfiguration(format!(
                         "Increase storage limit (current: {}MB)",
                         limit_mb
                     )),
@@ -1415,32 +1407,28 @@ impl fennec_core::ErrorInfo for MemoryError {
 
             MemoryError::FileNotFound { .. } => {
                 vec![
-                    fennec_core::RecoveryAction::ManualAction(
-                        "Check file path and permissions".to_string(),
-                    ),
-                    fennec_core::RecoveryAction::CheckConfiguration(
+                    RecoveryAction::ManualAction("Check file path and permissions".to_string()),
+                    RecoveryAction::CheckConfiguration(
                         "Verify file location in configuration".to_string(),
                     ),
                 ]
             }
 
             MemoryError::InvalidSearchQuery { issue, .. } => {
-                vec![fennec_core::RecoveryAction::RetryWithChanges(format!(
+                vec![RecoveryAction::RetryWithChanges(format!(
                     "Fix query: {}",
                     issue
                 ))]
             }
 
             MemoryError::InvalidConfiguration { suggestion, .. } => {
-                vec![fennec_core::RecoveryAction::CheckConfiguration(
-                    suggestion.clone(),
-                )]
+                vec![RecoveryAction::CheckConfiguration(suggestion.clone())]
             }
 
             MemoryError::ServiceUnavailable { service } => {
                 vec![
-                    fennec_core::RecoveryAction::Retry,
-                    fennec_core::RecoveryAction::CheckConfiguration(format!(
+                    RecoveryAction::Retry,
+                    RecoveryAction::CheckConfiguration(format!(
                         "Verify {} service configuration",
                         service
                     )),
@@ -1449,8 +1437,8 @@ impl fennec_core::ErrorInfo for MemoryError {
 
             // Most errors benefit from retry
             _ => vec![
-                fennec_core::RecoveryAction::Retry,
-                fennec_core::RecoveryAction::ContactSupport(
+                RecoveryAction::Retry,
+                RecoveryAction::ContactSupport(
                     "If the problem persists, check logs for details".to_string(),
                 ),
             ],

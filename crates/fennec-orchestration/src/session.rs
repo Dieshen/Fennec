@@ -30,17 +30,19 @@ impl SessionManager {
 
         // Validate provider configuration
         fennec_provider::ProviderClientFactory::validate_config(&config.provider).map_err(|e| {
-            fennec_core::FennecError::Provider {
-                message: format!("Provider configuration validation failed: {}", e),
-            }
+            fennec_core::FennecError::Provider(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Provider configuration validation failed: {}", e),
+            )))
         })?;
 
         // Create provider client
         let provider_client =
             ProviderClientFactory::create_client(&config.provider).map_err(|e| {
-                fennec_core::FennecError::Provider {
-                    message: format!("Failed to create provider client: {}", e),
-                }
+                fennec_core::FennecError::Provider(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to create provider client: {}", e),
+                )))
             })?;
 
         info!("Provider client created successfully");
@@ -316,8 +318,8 @@ impl SessionManager {
             transcript.add_message(role, content);
             Ok(())
         } else {
-            Err(fennec_core::FennecError::Session {
-                message: "No active transcript".to_string(),
+            Err(fennec_core::FennecError::SessionNotFound {
+                session_id: "unknown".to_string(),
             })
         }
     }

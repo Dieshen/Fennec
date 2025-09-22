@@ -107,7 +107,10 @@ mod tests {
         let policy = create_test_policy(SandboxLevel::WorkspaceWrite, &workspace, false);
 
         assert_eq!(policy.level(), &SandboxLevel::WorkspaceWrite);
-        assert_eq!(policy.workspace_path(), workspace.path());
+        assert_eq!(
+            policy.workspace_path(),
+            &workspace.path().canonicalize().unwrap()
+        );
         assert!(!policy.requires_approval());
     }
 
@@ -265,6 +268,8 @@ mod tests {
         let policy = create_test_policy(SandboxLevel::WorkspaceWrite, &workspace, false);
 
         let test_file = workspace.path().join("test.txt");
+        // Create the test file so path canonicalization works
+        std::fs::write(&test_file, "test content").unwrap();
 
         // Writing within workspace should be allowed
         assert_eq!(policy.check_write_path(&test_file), PolicyResult::Allow);
@@ -283,6 +288,8 @@ mod tests {
         let policy = create_test_policy(SandboxLevel::WorkspaceWrite, &workspace, true);
 
         let test_file = workspace.path().join("test.txt");
+        // Create the test file so path canonicalization works
+        std::fs::write(&test_file, "test content").unwrap();
 
         // Writing should require approval even within workspace
         assert!(matches!(
@@ -386,7 +393,10 @@ mod tests {
                 .unwrap();
 
         assert_eq!(policy.level(), &SandboxLevel::WorkspaceWrite);
-        assert_eq!(policy.workspace_path(), workspace.path());
+        assert_eq!(
+            policy.workspace_path(),
+            &workspace.path().canonicalize().unwrap()
+        );
 
         // Non-existent directory should fail
         let result = create_sandbox_policy(

@@ -2,13 +2,10 @@
 
 use crate::{config::PrivacyConfig, Error, Result};
 use regex::Regex;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use tracing::Subscriber;
-use tracing_subscriber::{
-    layer::{Context, Filter, SubscriberExt},
-    Layer,
-};
+use tracing_subscriber::{layer::Context, Layer};
 
 /// Layer that sanitizes sensitive data from log messages
 pub struct SanitizationLayer {
@@ -102,7 +99,7 @@ impl<S> Layer<S> for SanitizationLayer
 where
     S: Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
 {
-    fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
+    fn on_event(&self, _event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
         // For now, we'll implement basic message sanitization
         // In a full implementation, we would need to intercept and modify
         // the event's fields before they reach other layers

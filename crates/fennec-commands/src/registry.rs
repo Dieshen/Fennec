@@ -182,12 +182,12 @@ impl CommandRegistry {
         let start_time = std::time::Instant::now();
         let execution_id = Uuid::new_v4();
 
-        let command = self
-            .get_command(name)
-            .await
-            .ok_or_else(|| FennecError::Command {
-                message: format!("Command '{}' not found", name),
-            })?;
+        let command = self.get_command(name).await.ok_or_else(|| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Command '{}' not found", name),
+            )))
+        })?;
 
         let mut result = CommandExecutionResult {
             command_id: Uuid::new_v4(),

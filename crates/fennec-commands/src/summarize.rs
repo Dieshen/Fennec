@@ -145,9 +145,10 @@ impl SummarizeCommand {
             let path = Path::new(&args.target);
 
             if !path.exists() {
-                return Err(FennecError::Command {
-                    message: format!("Path does not exist: {}", args.target),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Path does not exist: {}", args.target),
+                )))
                 .into());
             }
 
@@ -156,9 +157,10 @@ impl SummarizeCommand {
             } else if path.is_dir() {
                 self.summarize_directory(path, args).await
             } else {
-                Err(FennecError::Command {
-                    message: format!("Unsupported path type: {}", args.target),
-                }
+                Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Unsupported path type: {}", args.target),
+                )))
                 .into())
             }
         } else {
@@ -168,11 +170,12 @@ impl SummarizeCommand {
 
     /// Summarize a single file
     async fn summarize_file(&self, path: &Path, args: &SummarizeArgs) -> Result<String> {
-        let content = fs::read_to_string(path)
-            .await
-            .map_err(|e| FennecError::Command {
-                message: format!("Failed to read file {}: {}", path.display(), e),
-            })?;
+        let content = fs::read_to_string(path).await.map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to read file {}: {}", path.display(), e),
+            )))
+        })?;
 
         let lines: Vec<&str> = content.lines().collect();
         let total_lines = lines.len();
@@ -377,10 +380,12 @@ impl CommandExecutor for SummarizeCommand {
         args: &serde_json::Value,
         _context: &CommandContext,
     ) -> Result<CommandPreview> {
-        let args: SummarizeArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid summarize arguments: {}", e),
-            })?;
+        let args: SummarizeArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid summarize arguments: {}", e),
+            )))
+        })?;
 
         let mut actions = Vec::new();
 
@@ -410,10 +415,12 @@ impl CommandExecutor for SummarizeCommand {
         args: &serde_json::Value,
         context: &CommandContext,
     ) -> Result<CommandResult> {
-        let args: SummarizeArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid summarize arguments: {}", e),
-            })?;
+        let args: SummarizeArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid summarize arguments: {}", e),
+            )))
+        })?;
 
         match self.generate_summary(&args, context).await {
             Ok(output) => Ok(CommandResult {
@@ -432,23 +439,27 @@ impl CommandExecutor for SummarizeCommand {
     }
 
     fn validate_args(&self, args: &serde_json::Value) -> Result<()> {
-        let args: SummarizeArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid summarize arguments: {}", e),
-            })?;
+        let args: SummarizeArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid summarize arguments: {}", e),
+            )))
+        })?;
 
         if args.target.trim().is_empty() {
-            return Err(FennecError::Command {
-                message: "Target cannot be empty".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Target cannot be empty",
+            )))
             .into());
         }
 
         if let Some(max_lines) = args.max_lines {
             if max_lines == 0 {
-                return Err(FennecError::Command {
-                    message: "max_lines must be greater than 0".to_string(),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "max_lines must be greater than 0",
+                )))
                 .into());
             }
         }

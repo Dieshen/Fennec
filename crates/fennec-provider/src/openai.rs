@@ -61,8 +61,8 @@ pub struct OpenAIClient {
 impl OpenAIClient {
     pub fn new(config: OpenAIConfig) -> Result<Self> {
         if config.api_key.is_empty() {
-            return Err(ProviderError::Configuration {
-                message: "OpenAI API key is required".to_string(),
+            return Err(ProviderError::ConfigurationMissing {
+                provider: "openai".to_string(),
             });
         }
 
@@ -70,8 +70,10 @@ impl OpenAIClient {
         headers.insert(
             header::AUTHORIZATION,
             header::HeaderValue::from_str(&format!("Bearer {}", config.api_key)).map_err(|e| {
-                ProviderError::Configuration {
-                    message: format!("Invalid API key format: {}", e),
+                ProviderError::ConfigurationInvalid {
+                    provider: "openai".to_string(),
+                    setting: "api_key".to_string(),
+                    issue: format!("Invalid format: {}", e),
                 }
             })?,
         );
@@ -88,8 +90,10 @@ impl OpenAIClient {
             .timeout(config.timeout)
             .default_headers(headers)
             .build()
-            .map_err(|e| ProviderError::Configuration {
-                message: format!("Failed to create HTTP client: {}", e),
+            .map_err(|e| ProviderError::ConfigurationInvalid {
+                provider: "openai".to_string(),
+                setting: "http_client".to_string(),
+                issue: format!("Failed to create HTTP client: {}", e),
             })?;
 
         let semaphore = Arc::new(Semaphore::new(config.max_concurrent_requests));
@@ -114,8 +118,10 @@ impl OpenAIClient {
             .semaphore
             .acquire()
             .await
-            .map_err(|e| ProviderError::Unknown {
+            .map_err(|e| ProviderError::Generic {
                 message: format!("Failed to acquire semaphore: {}", e),
+                provider: "openai".to_string(),
+                context: None,
             })?;
 
         let url = format!("{}/chat/completions", self.config.base_url);
@@ -128,9 +134,13 @@ impl OpenAIClient {
             )
             .await
             .map_err(|_| ProviderError::Timeout {
-                message: "Request timeout".to_string(),
+                operation: "chat_completion".to_string(),
+                timeout_ms: self.config.timeout.as_millis() as u64,
             })?
-            .map_err(ProviderError::Http)?;
+            .map_err(|e| ProviderError::Http {
+                operation: "chat_completion_request".to_string(),
+                source: e,
+            })?;
 
             self.handle_response(response).await
         })
@@ -146,8 +156,10 @@ impl OpenAIClient {
             .semaphore
             .acquire()
             .await
-            .map_err(|e| ProviderError::Unknown {
+            .map_err(|e| ProviderError::Generic {
                 message: format!("Failed to acquire semaphore: {}", e),
+                provider: "openai".to_string(),
+                context: None,
             })?;
 
         request.stream = Some(true);
@@ -160,9 +172,13 @@ impl OpenAIClient {
         )
         .await
         .map_err(|_| ProviderError::Timeout {
-            message: "Request timeout".to_string(),
+            operation: "stream_chat_completion".to_string(),
+            timeout_ms: self.config.timeout.as_millis() as u64,
         })?
-        .map_err(ProviderError::Http)?;
+        .map_err(|e| ProviderError::Http {
+            operation: "stream_chat_completion_request".to_string(),
+            source: e,
+        })?;
 
         if !response.status().is_success() {
             let error = self.parse_error_response(response).await?;
@@ -178,8 +194,10 @@ impl OpenAIClient {
             .semaphore
             .acquire()
             .await
-            .map_err(|e| ProviderError::Unknown {
+            .map_err(|e| ProviderError::Generic {
                 message: format!("Failed to acquire semaphore: {}", e),
+                provider: "openai".to_string(),
+                context: None,
             })?;
 
         let url = format!("{}/models", self.config.base_url);
@@ -189,9 +207,13 @@ impl OpenAIClient {
             let response = timeout(self.config.timeout, self.client.get(&url).send())
                 .await
                 .map_err(|_| ProviderError::Timeout {
-                    message: "Request timeout".to_string(),
+                    operation: "embed".to_string(),
+                    timeout_ms: self.config.timeout.as_millis() as u64,
                 })?
-                .map_err(ProviderError::Http)?;
+                .map_err(|e| ProviderError::Http {
+                    operation: "embed_request".to_string(),
+                    source: e,
+                })?;
 
             self.handle_response(response).await
         })
@@ -205,12 +227,18 @@ impl OpenAIClient {
         let status = response.status();
 
         if status.is_success() {
-            let response_text = response.text().await.map_err(ProviderError::Http)?;
+            let response_text = response.text().await.map_err(|e| ProviderError::Http {
+                operation: "read_response_text".to_string(),
+                source: e,
+            })?;
             debug!("Received response: {}", response_text);
 
             serde_json::from_str(&response_text).map_err(|e| {
                 error!("Failed to parse response: {}, text: {}", e, response_text);
-                ProviderError::Json(e)
+                ProviderError::Json {
+                    operation: "parse_response".to_string(),
+                    source: e,
+                }
             })
         } else {
             let error = self.parse_error_response(response).await?;
@@ -220,26 +248,36 @@ impl OpenAIClient {
 
     async fn parse_error_response(&self, response: Response) -> Result<ProviderError> {
         let status_code = response.status().as_u16();
-        let response_text = response.text().await.map_err(ProviderError::Http)?;
+        let response_text = response.text().await.map_err(|e| ProviderError::Http {
+            operation: "read_error_response_text".to_string(),
+            source: e,
+        })?;
 
         // Try to parse as OpenAI error format
         if let Ok(openai_error) = serde_json::from_str::<OpenAIError>(&response_text) {
             let error_details = openai_error.error;
 
             match status_code {
-                401 => Err(ProviderError::Authentication {
-                    message: error_details.message,
+                401 => Err(ProviderError::AuthenticationFailed {
+                    provider: "openai".to_string(),
+                    reason: error_details.message,
                 }),
                 429 => {
                     // Extract retry-after from the error message if present
-                    let retry_after = self.extract_retry_after(&error_details.message);
+                    let retry_after = self
+                        .extract_retry_after(&error_details.message)
+                        .unwrap_or(60);
                     Err(ProviderError::RateLimit {
+                        provider: "openai".to_string(),
                         message: error_details.message,
                         retry_after,
+                        daily_limit: None,
+                        current_usage: None,
                     })
                 }
                 400 => Err(ProviderError::InvalidRequest {
-                    message: error_details.message,
+                    field: "request".to_string(),
+                    issue: error_details.message,
                 }),
                 404 if error_details.error_type == "model_not_found" => {
                     Err(ProviderError::ModelNotFound {
@@ -247,32 +285,46 @@ impl OpenAIClient {
                     })
                 }
                 413 => Err(ProviderError::TokenLimit {
-                    message: error_details.message,
+                    used: 0,  // We don't have exact usage information from OpenAI error
+                    limit: 0, // We don't have exact limit information from OpenAI error
+                    suggestion: error_details.message,
                 }),
                 500..=599 => Err(ProviderError::ServerError {
+                    provider: "openai".to_string(),
                     status_code,
                     message: error_details.message,
+                    is_temporary: true,
                 }),
-                _ => Err(ProviderError::Unknown {
+                _ => Err(ProviderError::Generic {
                     message: error_details.message,
+                    provider: "openai".to_string(),
+                    context: None,
                 }),
             }
         } else {
             // Fallback for non-standard error formats
             match status_code {
-                401 => Err(ProviderError::Authentication {
-                    message: "Authentication failed".to_string(),
+                401 => Err(ProviderError::AuthenticationFailed {
+                    provider: "openai".to_string(),
+                    reason: "Authentication failed".to_string(),
                 }),
                 429 => Err(ProviderError::RateLimit {
+                    provider: "openai".to_string(),
                     message: "Rate limit exceeded".to_string(),
-                    retry_after: Some(60),
+                    retry_after: 60,
+                    daily_limit: None,
+                    current_usage: None,
                 }),
                 500..=599 => Err(ProviderError::ServerError {
+                    provider: "openai".to_string(),
                     status_code,
                     message: response_text,
+                    is_temporary: true,
                 }),
-                _ => Err(ProviderError::Unknown {
+                _ => Err(ProviderError::Generic {
                     message: format!("HTTP {}: {}", status_code, response_text),
+                    provider: "openai".to_string(),
+                    context: Some(format!("status_code: {}", status_code)),
                 }),
             }
         }
@@ -352,8 +404,10 @@ impl ProviderClient for OpenAIClient {
                 usage: response.usage.map(Into::into),
             })
         } else {
-            Err(ProviderError::Unknown {
+            Err(ProviderError::Generic {
                 message: "No choices in response".to_string(),
+                provider: "openai".to_string(),
+                context: None,
             }
             .into())
         }
@@ -435,10 +489,10 @@ mod tests {
         let result = OpenAIClient::new(config);
         assert!(result.is_err());
 
-        if let Err(ProviderError::Configuration { message }) = result {
-            assert!(message.contains("API key is required"));
+        if let Err(ProviderError::ConfigurationMissing { provider }) = result {
+            assert_eq!(provider, "openai");
         } else {
-            panic!("Expected Configuration error");
+            panic!("Expected ConfigurationMissing error");
         }
     }
 }

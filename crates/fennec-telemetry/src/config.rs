@@ -119,6 +119,33 @@ pub struct PrivacyConfig {
     pub audit_log_path: Option<PathBuf>,
 }
 
+impl Default for PrivacyConfig {
+    fn default() -> Self {
+        Self {
+            sanitize_enabled: true,
+            redaction_patterns: vec![
+                // API keys and tokens
+                r"(?i)(api_?key|token|secret|password)\s*[:=]\s*['\x22]?([a-zA-Z0-9_\-\.]+)['\x22]?".to_string(),
+                // Credit card numbers
+                r"\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b".to_string(),
+                // Social security numbers
+                r"\b\d{3}-\d{2}-\d{4}\b".to_string(),
+                // Email addresses (partial redaction)
+                r"\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b".to_string(),
+            ],
+            redacted_fields: vec![
+                "password".to_string(),
+                "api_key".to_string(),
+                "secret".to_string(),
+                "token".to_string(),
+                "authorization".to_string(),
+            ],
+            audit_trail: true,
+            audit_log_path: None,
+        }
+    }
+}
+
 /// Log level configuration
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LogLevel {
@@ -417,6 +444,13 @@ mod tests {
 
     #[test]
     fn test_env_overrides() {
+        // Ensure clean state by removing any existing env vars first
+        std::env::remove_var("FENNEC_LOG_LEVEL");
+        std::env::remove_var("FENNEC_LOG_FORMAT");
+        std::env::remove_var("FENNEC_TELEMETRY_ENABLED");
+        std::env::remove_var("FENNEC_FILE_LOGGING");
+
+        // Set test values
         std::env::set_var("FENNEC_LOG_LEVEL", "DEBUG");
         std::env::set_var("FENNEC_LOG_FORMAT", "json");
 
@@ -426,6 +460,7 @@ mod tests {
         assert!(matches!(config.logging.level, LogLevel::Debug));
         assert!(matches!(config.logging.format, LogFormat::Json));
 
+        // Clean up
         std::env::remove_var("FENNEC_LOG_LEVEL");
         std::env::remove_var("FENNEC_LOG_FORMAT");
     }

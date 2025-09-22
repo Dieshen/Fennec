@@ -1,8 +1,8 @@
-use fennec_core::{ErrorCategory, ErrorInfo, ErrorSeverity, RecoveryAction};
+use fennec_core::error::{ErrorCategory, ErrorInfo, ErrorSeverity, RecoveryAction};
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Widget, Wrap},
 };
 use thiserror::Error;
 
@@ -123,7 +123,7 @@ pub enum TuiError {
     BackendService(#[from] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("Command execution error: {0}")]
-    CommandExecution(#[from] Box<dyn std::error::Error + Send + Sync>),
+    CommandExecution(Box<dyn std::error::Error + Send + Sync>),
 
     // IO errors (wrapped for TUI context)
     #[error("IO operation failed: {operation} - {source}")]
@@ -377,7 +377,7 @@ impl From<TuiError> for fennec_core::FennecError {
 }
 
 /// Error display widget for the TUI
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ErrorDisplay {
     /// The error being displayed
     pub error: Option<Box<dyn std::error::Error + Send + Sync>>,

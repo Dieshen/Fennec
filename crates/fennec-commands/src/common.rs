@@ -62,15 +62,19 @@ pub fn validate_file_access(path: &str) -> Result<()> {
     };
 
     // Check for path traversal attempts
-    let canonical = abs_path.canonicalize().map_err(|_| FennecError::Security {
-        message: "Invalid file path".to_string(),
+    let canonical = abs_path.canonicalize().map_err(|_| {
+        FennecError::Security(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Invalid file path",
+        )))
     })?;
 
     // Ensure the canonical path is still within expected bounds
     if canonical.to_string_lossy().contains("..") {
-        return Err(FennecError::Security {
-            message: "Path traversal detected".to_string(),
-        }
+        return Err(FennecError::Security(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Path traversal detected",
+        )))
         .into());
     }
 

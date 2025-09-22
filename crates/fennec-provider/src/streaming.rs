@@ -43,8 +43,9 @@ impl SseStream {
                             }
                             Err(e) => {
                                 warn!("Failed to parse SSE chunk: {}, data: {}", e, data);
-                                Some(Err(ProviderError::Stream {
-                                    message: format!("Failed to parse chunk: {}", e),
+                                Some(Err(ProviderError::StreamError {
+                                    operation: "parse_chunk".to_string(),
+                                    reason: format!("Failed to parse chunk: {}", e),
                                 }))
                             }
                         }
@@ -113,14 +114,18 @@ impl Stream for SseStream {
                             }
                         }
                         Err(e) => {
-                            return Poll::Ready(Some(Err(ProviderError::Stream {
-                                message: format!("Invalid UTF-8 in stream: {}", e),
+                            return Poll::Ready(Some(Err(ProviderError::StreamError {
+                                operation: "decode_utf8".to_string(),
+                                reason: format!("Invalid UTF-8 in stream: {}", e),
                             })));
                         }
                     }
                 }
                 Poll::Ready(Some(Err(e))) => {
-                    return Poll::Ready(Some(Err(ProviderError::Http(e))));
+                    return Poll::Ready(Some(Err(ProviderError::Http {
+                        operation: "stream_chunk_read".to_string(),
+                        source: e,
+                    })));
                 }
                 Poll::Ready(None) => {
                     // Check if there's remaining data in buffer

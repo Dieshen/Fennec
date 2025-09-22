@@ -153,22 +153,22 @@ pub enum FennecError {
 
     // Domain-specific error delegation (for backward compatibility)
     #[error("Provider error: {0}")]
-    Provider(#[from] Box<dyn std::error::Error + Send + Sync>),
+    Provider(Box<dyn std::error::Error + Send + Sync>),
 
     #[error("Command error: {0}")]
-    Command(#[from] Box<dyn std::error::Error + Send + Sync>),
+    Command(Box<dyn std::error::Error + Send + Sync>),
 
     #[error("Security error: {0}")]
-    Security(#[from] Box<dyn std::error::Error + Send + Sync>),
+    Security(Box<dyn std::error::Error + Send + Sync>),
 
     #[error("Memory error: {0}")]
-    Memory(#[from] Box<dyn std::error::Error + Send + Sync>),
+    Memory(Box<dyn std::error::Error + Send + Sync>),
 
     #[error("TUI error: {0}")]
-    Tui(#[from] Box<dyn std::error::Error + Send + Sync>),
+    Tui(Box<dyn std::error::Error + Send + Sync>),
 
     #[error("Orchestration error: {0}")]
-    Orchestration(#[from] Box<dyn std::error::Error + Send + Sync>),
+    Orchestration(Box<dyn std::error::Error + Send + Sync>),
 
     // Catch-all for unexpected errors
     #[error("Unexpected error: {message}")]
@@ -394,7 +394,7 @@ impl ErrorInfo for FennecError {
 }
 
 /// Helper function to create user-friendly error from any error
-pub fn user_friendly_error(error: &dyn std::error::Error) -> String {
+pub fn user_friendly_error(error: &(dyn std::error::Error + 'static)) -> String {
     if let Some(fennec_error) = error.downcast_ref::<FennecError>() {
         fennec_error.user_message()
     } else {
@@ -403,7 +403,7 @@ pub fn user_friendly_error(error: &dyn std::error::Error) -> String {
 }
 
 /// Helper function to get recovery actions from any error
-pub fn get_recovery_actions(error: &dyn std::error::Error) -> Vec<RecoveryAction> {
+pub fn get_recovery_actions(error: &(dyn std::error::Error + 'static)) -> Vec<RecoveryAction> {
     if let Some(fennec_error) = error.downcast_ref::<FennecError>() {
         fennec_error.recovery_actions()
     } else {
@@ -412,7 +412,7 @@ pub fn get_recovery_actions(error: &dyn std::error::Error) -> Vec<RecoveryAction
 }
 
 /// Helper function to check if an error is retryable
-pub fn is_retryable_error(error: &dyn std::error::Error) -> bool {
+pub fn is_retryable_error(error: &(dyn std::error::Error + 'static)) -> bool {
     if let Some(fennec_error) = error.downcast_ref::<FennecError>() {
         fennec_error.is_retryable()
     } else {

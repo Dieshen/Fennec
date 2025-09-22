@@ -153,9 +153,10 @@ impl EnhancedSummarizeCommand {
                     let path = Path::new(&args.target);
 
                     if !path.exists() {
-                        return Err(FennecError::Command {
-                            message: format!("Path does not exist: {}", args.target),
-                        }
+                        return Err(FennecError::Command(Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Path does not exist: {}", args.target),
+                        )))
                         .into());
                     }
 
@@ -164,9 +165,10 @@ impl EnhancedSummarizeCommand {
                     } else if path.is_dir() {
                         self.summarize_directory(path, args).await
                     } else {
-                        Err(FennecError::Command {
-                            message: format!("Unsupported path type: {}", args.target),
-                        }
+                        Err(FennecError::Command(Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Unsupported path type: {}", args.target),
+                        )))
                         .into())
                     }
                 } else {
@@ -185,8 +187,11 @@ impl EnhancedSummarizeCommand {
         let session_id = if args.target == "current" {
             context.session_id
         } else {
-            Uuid::parse_str(&args.target).map_err(|e| FennecError::Command {
-                message: format!("Invalid session ID: {}", e),
+            Uuid::parse_str(&args.target).map_err(|e| {
+                FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Invalid session ID: {}", e),
+                )))
             })?
         };
 
@@ -235,13 +240,12 @@ impl EnhancedSummarizeCommand {
         args: &EnhancedSummarizeArgs,
         context: &CommandContext,
     ) -> Result<String> {
-        let workspace_path =
-            context
-                .workspace_path
-                .as_ref()
-                .ok_or_else(|| FennecError::Command {
-                    message: "No workspace path available for project summary".to_string(),
-                })?;
+        let workspace_path = context.workspace_path.as_ref().ok_or_else(|| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "No workspace path available for project summary",
+            )))
+        })?;
 
         let depth = args.depth_level.as_ref().unwrap_or(&SummaryDepth::Standard);
 
@@ -327,11 +331,12 @@ impl EnhancedSummarizeCommand {
 
     /// Summarize a single file
     async fn summarize_file(&self, path: &Path, args: &EnhancedSummarizeArgs) -> Result<String> {
-        let content = fs::read_to_string(path)
-            .await
-            .map_err(|e| FennecError::Command {
-                message: format!("Failed to read file {}: {}", path.display(), e),
-            })?;
+        let content = fs::read_to_string(path).await.map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to read file {}: {}", path.display(), e),
+            )))
+        })?;
 
         let lines: Vec<&str> = content.lines().collect();
         let total_lines = lines.len();
@@ -844,12 +849,12 @@ impl EnhancedSummarizeCommand {
         }
 
         let mut memory_file_service_guard = self.memory_file_service.write().await;
-        let memory_file_service =
-            memory_file_service_guard
-                .as_mut()
-                .ok_or_else(|| FennecError::Command {
-                    message: "Memory file service not available".to_string(),
-                })?;
+        let memory_file_service = memory_file_service_guard.as_mut().ok_or_else(|| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Memory file service not available",
+            )))
+        })?;
 
         let summary_type = args.summary_type.as_ref().unwrap_or(&SummaryType::File);
         let file_type = match summary_type {
@@ -896,13 +901,12 @@ impl EnhancedSummarizeCommand {
 
     /// Write summary to progress file
     async fn write_to_progress_file(&self, summary: &str, context: &CommandContext) -> Result<()> {
-        let workspace_path =
-            context
-                .workspace_path
-                .as_ref()
-                .ok_or_else(|| FennecError::Command {
-                    message: "No workspace path available".to_string(),
-                })?;
+        let workspace_path = context.workspace_path.as_ref().ok_or_else(|| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "No workspace path available",
+            )))
+        })?;
 
         let workspace_path_buf = std::path::PathBuf::from(workspace_path);
         let progress_file = workspace_path_buf.join("progress.md");
@@ -949,10 +953,12 @@ impl CommandExecutor for EnhancedSummarizeCommand {
         args: &serde_json::Value,
         _context: &CommandContext,
     ) -> Result<CommandPreview> {
-        let args: EnhancedSummarizeArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid enhanced summarize arguments: {}", e),
-            })?;
+        let args: EnhancedSummarizeArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid enhanced summarize arguments: {}", e),
+            )))
+        })?;
 
         let mut actions = Vec::new();
         let summary_type = args.summary_type.as_ref().unwrap_or(&SummaryType::File);
@@ -1016,10 +1022,12 @@ impl CommandExecutor for EnhancedSummarizeCommand {
         args: &serde_json::Value,
         context: &CommandContext,
     ) -> Result<CommandResult> {
-        let args: EnhancedSummarizeArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid enhanced summarize arguments: {}", e),
-            })?;
+        let args: EnhancedSummarizeArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid enhanced summarize arguments: {}", e),
+            )))
+        })?;
 
         match self.generate_summary(&args, context).await {
             Ok(summary) => {
@@ -1104,32 +1112,37 @@ impl CommandExecutor for EnhancedSummarizeCommand {
     }
 
     fn validate_args(&self, args: &serde_json::Value) -> Result<()> {
-        let args: EnhancedSummarizeArgs =
-            serde_json::from_value(args.clone()).map_err(|e| FennecError::Command {
-                message: format!("Invalid enhanced summarize arguments: {}", e),
-            })?;
+        let args: EnhancedSummarizeArgs = serde_json::from_value(args.clone()).map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Invalid enhanced summarize arguments: {}", e),
+            )))
+        })?;
 
         if args.target.trim().is_empty() {
-            return Err(FennecError::Command {
-                message: "Target cannot be empty".to_string(),
-            }
+            return Err(FennecError::Command(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Target cannot be empty",
+            )))
             .into());
         }
 
         if let Some(max_lines) = args.max_lines {
             if max_lines == 0 {
-                return Err(FennecError::Command {
-                    message: "max_lines must be greater than 0".to_string(),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "max_lines must be greater than 0",
+                )))
                 .into());
             }
         }
 
         if let Some(time_range) = args.time_range_hours {
             if time_range == 0 {
-                return Err(FennecError::Command {
-                    message: "time_range_hours must be greater than 0".to_string(),
-                }
+                return Err(FennecError::Command(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "time_range_hours must be greater than 0",
+                )))
                 .into());
             }
         }

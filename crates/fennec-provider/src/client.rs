@@ -39,8 +39,8 @@ impl ProviderClientFactory {
         }
 
         if config.default_model.is_empty() {
-            return Err(ProviderError::Configuration {
-                message: "Default model must be specified".to_string(),
+            return Err(ProviderError::ConfigurationMissing {
+                provider: "default".to_string(),
             });
         }
 
@@ -51,8 +51,10 @@ impl ProviderClientFactory {
         // Validate base URL format if provided
         if let Some(base_url) = &config.base_url {
             if !base_url.starts_with("http://") && !base_url.starts_with("https://") {
-                return Err(ProviderError::Configuration {
-                    message: "Base URL must start with http:// or https://".to_string(),
+                return Err(ProviderError::ConfigurationInvalid {
+                    provider: "default".to_string(),
+                    setting: "base_url".to_string(),
+                    issue: "must start with http:// or https://".to_string(),
                 });
             }
         }

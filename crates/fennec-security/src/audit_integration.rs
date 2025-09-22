@@ -265,9 +265,7 @@ impl AuditableFileOperations {
     pub async fn read_file(&self, path: &str) -> Result<Vec<u8>> {
         let data = tokio::fs::read(path)
             .await
-            .map_err(|e| fennec_core::FennecError::Security {
-                message: format!("Failed to read file {}: {}", path, e),
-            })?;
+            .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
         let checksum = utils::sha256_checksum(&data);
         self.executor
@@ -282,12 +280,9 @@ impl AuditableFileOperations {
         let path_buf = std::path::Path::new(path);
         let exists = path_buf.exists();
         let checksum_before = if exists {
-            let existing_content =
-                tokio::fs::read(path)
-                    .await
-                    .map_err(|e| fennec_core::FennecError::Security {
-                        message: format!("Failed to read existing file {}: {}", path, e),
-                    })?;
+            let existing_content = tokio::fs::read(path)
+                .await
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
             Some(utils::sha256_checksum(&existing_content))
         } else {
             None
@@ -309,9 +304,7 @@ impl AuditableFileOperations {
         // Write the file
         tokio::fs::write(path, content)
             .await
-            .map_err(|e| fennec_core::FennecError::Security {
-                message: format!("Failed to write file {}: {}", path, e),
-            })?;
+            .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
         let checksum_after = utils::sha256_checksum(content);
 
@@ -338,17 +331,17 @@ impl AuditableFileOperations {
     pub async fn delete_file(&self, path: &str, create_backup: bool) -> Result<()> {
         let path_buf = std::path::Path::new(path);
         if !path_buf.exists() {
-            return Err(fennec_core::FennecError::Security {
-                message: format!("File does not exist: {}", path),
-            });
+            return Err(fennec_core::FennecError::Security(Box::new(
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("File does not exist: {}", path),
+                ),
+            )));
         }
 
-        let existing_content =
-            tokio::fs::read(path)
-                .await
-                .map_err(|e| fennec_core::FennecError::Security {
-                    message: format!("Failed to read file before deletion {}: {}", path, e),
-                })?;
+        let existing_content = tokio::fs::read(path)
+            .await
+            .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
         let checksum_before = utils::sha256_checksum(&existing_content);
         let size_bytes = existing_content.len() as u64;
@@ -373,9 +366,7 @@ impl AuditableFileOperations {
         // Delete the file
         tokio::fs::remove_file(path)
             .await
-            .map_err(|e| fennec_core::FennecError::Security {
-                message: format!("Failed to delete file {}: {}", path, e),
-            })?;
+            .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
         self.executor
             .log_file_delete(path, size_bytes, &checksum_before, backup_created)

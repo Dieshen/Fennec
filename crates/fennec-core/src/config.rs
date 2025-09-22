@@ -101,10 +101,16 @@ impl Config {
 
         if config_file.exists() {
             info!("Loading config from: {}", config_file.display());
-            let content = tokio::fs::read_to_string(&config_file).await?;
+            let content = tokio::fs::read_to_string(&config_file).await.map_err(|e| {
+                crate::FennecError::FileRead {
+                    path: config_file.display().to_string(),
+                    source: e,
+                }
+            })?;
             let mut config: Config =
-                toml::from_str(&content).map_err(|e| crate::FennecError::Config {
-                    message: format!("Failed to parse config file: {}", e),
+                toml::from_str(&content).map_err(|e| crate::FennecError::ConfigLoadFailed {
+                    path: config_file.display().to_string(),
+                    source: Box::new(e),
                 })?;
 
             // Override with environment variables
@@ -120,8 +126,9 @@ impl Config {
 
     fn default_config_path() -> Result<PathBuf> {
         let project_dirs = ProjectDirs::from("com", "fennec", "fennec").ok_or_else(|| {
-            crate::FennecError::Config {
-                message: "Could not determine config directory".to_string(),
+            crate::FennecError::ConfigInvalid {
+                issue: "Could not determine config directory".to_string(),
+                suggestion: "Ensure your system has proper home directory permissions".to_string(),
             }
         })?;
 

@@ -254,8 +254,9 @@ async fn test_dry_run_functionality() -> Result<()> {
     let context = create_test_context(SandboxLevel::FullAccess, true, None);
 
     // Test dry run with edit command
+    let temp_path = std::env::temp_dir().join("nonexistent.txt");
     let args = serde_json::json!({
-        "file_path": "/tmp/nonexistent.txt",
+        "file_path": temp_path.to_string_lossy(),
         "strategy": {
             "type": "Replace",
             "data": { "content": "test content" }

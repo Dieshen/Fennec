@@ -1,12 +1,13 @@
 //! Log file rotation implementation
 
-use crate::{Error, Result};
+use crate::Result;
 use chrono::{DateTime, Utc};
 use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
+use tracing_subscriber::fmt::MakeWriter;
 
 /// A writer that automatically rotates log files based on size
 pub struct RotatingFileWriter {
@@ -181,6 +182,15 @@ impl Clone for RotatingFileWriter {
     }
 }
 
+// Implement MakeWriter for use with tracing-subscriber
+impl<'a> MakeWriter<'a> for RotatingFileWriter {
+    type Writer = RotatingFileWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        self.clone()
+    }
+}
+
 /// Utility functions for log file management
 pub struct LogFileManager;
 
@@ -202,12 +212,13 @@ impl LogFileManager {
                     let metadata = entry.metadata()?;
                     let modified = metadata.modified()?;
                     let size = metadata.len();
+                    let is_current = file_name == format!("{}.log", base_name);
 
                     log_files.push(LogFileInfo {
                         path,
                         size,
                         modified,
-                        is_current: file_name == format!("{}.log", base_name),
+                        is_current,
                     });
                 }
             }

@@ -305,11 +305,9 @@ impl SessionAuditManager {
     async fn initialize_file(&mut self) -> Result<()> {
         // Create directory if it doesn't exist
         if let Some(parent) = self.file_path.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                fennec_core::FennecError::Security {
-                    message: format!("Failed to create audit directory: {}", e),
-                }
-            })?;
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
         }
 
         // Open file for append
@@ -318,9 +316,7 @@ impl SessionAuditManager {
             .append(true)
             .open(&self.file_path)
             .await
-            .map_err(|e| fennec_core::FennecError::Security {
-                message: format!("Failed to open audit file: {}", e),
-            })?;
+            .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
         self.file = Some(file);
         Ok(())
@@ -371,40 +367,30 @@ impl SessionAuditManager {
             data: event_data,
         };
 
-        let event_json =
-            serde_json::to_string(&event).map_err(|e| fennec_core::FennecError::Security {
-                message: format!("Failed to serialize audit event: {}", e),
-            })?;
+        let event_json = serde_json::to_string(&event)
+            .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
         if let Some(ref mut file) = &mut self.file.as_ref() {
             // Write as JSONL (one JSON object per line)
-            let mut file_clone =
-                file.try_clone()
-                    .await
-                    .map_err(|e| fennec_core::FennecError::Security {
-                        message: format!("Failed to clone file handle: {}", e),
-                    })?;
+            let mut file_clone = file
+                .try_clone()
+                .await
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
             file_clone
                 .write_all(event_json.as_bytes())
                 .await
-                .map_err(|e| fennec_core::FennecError::Security {
-                    message: format!("Failed to write audit event: {}", e),
-                })?;
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
             file_clone
                 .write_all(b"\n")
                 .await
-                .map_err(|e| fennec_core::FennecError::Security {
-                    message: format!("Failed to write newline: {}", e),
-                })?;
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
             file_clone
                 .flush()
                 .await
-                .map_err(|e| fennec_core::FennecError::Security {
-                    message: format!("Failed to flush audit file: {}", e),
-                })?;
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
             debug!("Audit event written: {}", event.metadata.event_id);
         }
@@ -472,9 +458,7 @@ impl AuditSystem {
         if system.enabled {
             tokio::fs::create_dir_all(&system.base_audit_path)
                 .await
-                .map_err(|e| fennec_core::FennecError::Security {
-                    message: format!("Failed to create audit base directory: {}", e),
-                })?;
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
         }
 
         Ok(system)
@@ -755,11 +739,8 @@ impl AuditQueryEngine {
         let result = self.query_events(filter).await?;
 
         match format {
-            ExportFormat::Json => serde_json::to_string_pretty(&result.events).map_err(|e| {
-                fennec_core::FennecError::Security {
-                    message: format!("Failed to serialize audit events to JSON: {}", e),
-                }
-            }),
+            ExportFormat::Json => serde_json::to_string_pretty(&result.events)
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e))),
             ExportFormat::Csv => {
                 let mut csv_output = String::new();
                 csv_output.push_str("timestamp,event_id,session_id,sequence_number,event_type,user_id,workspace_path\n");
@@ -805,39 +786,30 @@ impl AuditQueryEngine {
         // If session_id is specified, try to find the specific file
         if let Some(session_id) = filter.session_id {
             // Scan all date directories for the session file
-            let mut date_dirs = tokio::fs::read_dir(&sessions_dir).await.map_err(|e| {
-                fennec_core::FennecError::Security {
-                    message: format!("Failed to read sessions directory: {}", e),
-                }
-            })?;
+            let mut date_dirs = tokio::fs::read_dir(&sessions_dir)
+                .await
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
-            while let Some(entry) =
-                date_dirs
-                    .next_entry()
-                    .await
-                    .map_err(|e| fennec_core::FennecError::Security {
-                        message: format!("Failed to read directory entry: {}", e),
-                    })?
+            while let Some(entry) = date_dirs
+                .next_entry()
+                .await
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?
             {
                 if entry
                     .file_type()
                     .await
-                    .map_err(|e| fennec_core::FennecError::Security {
-                        message: format!("Failed to get file type: {}", e),
-                    })?
+                    .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?
                     .is_dir()
                 {
-                    let mut files = tokio::fs::read_dir(entry.path()).await.map_err(|e| {
-                        fennec_core::FennecError::Security {
-                            message: format!("Failed to read date directory: {}", e),
-                        }
-                    })?;
+                    let mut files = tokio::fs::read_dir(entry.path())
+                        .await
+                        .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
-                    while let Some(file) = files.next_entry().await.map_err(|e| {
-                        fennec_core::FennecError::Security {
-                            message: format!("Failed to read file entry: {}", e),
-                        }
-                    })? {
+                    while let Some(file) = files
+                        .next_entry()
+                        .await
+                        .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?
+                    {
                         let file_name = file.file_name();
                         let file_name_str = file_name.to_string_lossy();
 
@@ -851,26 +823,19 @@ impl AuditQueryEngine {
             }
         } else {
             // Scan all files, optionally filtered by date range
-            let mut date_dirs = tokio::fs::read_dir(&sessions_dir).await.map_err(|e| {
-                fennec_core::FennecError::Security {
-                    message: format!("Failed to read sessions directory: {}", e),
-                }
-            })?;
+            let mut date_dirs = tokio::fs::read_dir(&sessions_dir)
+                .await
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
-            while let Some(entry) =
-                date_dirs
-                    .next_entry()
-                    .await
-                    .map_err(|e| fennec_core::FennecError::Security {
-                        message: format!("Failed to read directory entry: {}", e),
-                    })?
+            while let Some(entry) = date_dirs
+                .next_entry()
+                .await
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?
             {
                 if entry
                     .file_type()
                     .await
-                    .map_err(|e| fennec_core::FennecError::Security {
-                        message: format!("Failed to get file type: {}", e),
-                    })?
+                    .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?
                     .is_dir()
                 {
                     // Check if this date directory is within our date range
@@ -899,17 +864,15 @@ impl AuditQueryEngine {
                         }
                     }
 
-                    let mut files = tokio::fs::read_dir(entry.path()).await.map_err(|e| {
-                        fennec_core::FennecError::Security {
-                            message: format!("Failed to read date directory: {}", e),
-                        }
-                    })?;
+                    let mut files = tokio::fs::read_dir(entry.path())
+                        .await
+                        .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
-                    while let Some(file) = files.next_entry().await.map_err(|e| {
-                        fennec_core::FennecError::Security {
-                            message: format!("Failed to read file entry: {}", e),
-                        }
-                    })? {
+                    while let Some(file) = files
+                        .next_entry()
+                        .await
+                        .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?
+                    {
                         let file_name = file.file_name();
                         let file_name_str = file_name.to_string_lossy();
 
@@ -1256,37 +1219,27 @@ mod legacy {
 
         /// Serialize and write the event to file
         async fn serialize_and_write(&self, event: &serde_json::Value) -> Result<()> {
-            let log_line =
-                serde_json::to_string(event).map_err(|e| fennec_core::FennecError::Security {
-                    message: format!("Failed to serialize audit log entry: {}", e),
-                })?;
+            let log_line = serde_json::to_string(event)
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
             let mut file = OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(&self.log_path)
                 .await
-                .map_err(|e| fennec_core::FennecError::Security {
-                    message: format!("Failed to open audit log file: {}", e),
-                })?;
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
-            file.write_all(log_line.as_bytes()).await.map_err(|e| {
-                fennec_core::FennecError::Security {
-                    message: format!("Failed to write to audit log file: {}", e),
-                }
-            })?;
+            file.write_all(log_line.as_bytes())
+                .await
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
             file.write_all(b"\n")
                 .await
-                .map_err(|e| fennec_core::FennecError::Security {
-                    message: format!("Failed to write newline to audit log file: {}", e),
-                })?;
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
             file.flush()
                 .await
-                .map_err(|e| fennec_core::FennecError::Security {
-                    message: format!("Failed to flush audit log file: {}", e),
-                })?;
+                .map_err(|e| fennec_core::FennecError::Security(Box::new(e)))?;
 
             Ok(())
         }

@@ -3,7 +3,7 @@
 use crate::{
     config::RetentionConfig,
     rotation::{LogFileInfo, LogFileManager},
-    Error, Result,
+    Result,
 };
 use std::path::Path;
 use std::time::{Duration, SystemTime};
@@ -128,25 +128,23 @@ impl RetentionManager {
 
         let files_to_compress: Vec<_> = log_files
             .iter()
-            .filter(|f| !f.is_compressed() && f.modified < one_day_ago)
+            .enumerate()
+            .filter(|(_, f)| !f.is_compressed() && f.modified < one_day_ago)
+            .map(|(idx, f)| (idx, f.path.clone()))
             .collect();
 
-        for file_info in files_to_compress {
-            match LogFileManager::compress_log_file(&file_info.path) {
+        for (index, file_path) in files_to_compress {
+            match LogFileManager::compress_log_file(&file_path) {
                 Ok(compressed_path) => {
                     compressed_count += 1;
 
                     // Update the file info in our list
-                    if let Some(existing) = log_files.iter_mut().find(|f| f.path == file_info.path)
-                    {
-                        existing.path = compressed_path;
-                        // Note: We don't update the size here as it will be recalculated
-                    }
+                    log_files[index].path = compressed_path;
                 }
                 Err(e) => {
                     warn!(
                         telemetry.event = "compression_failed",
-                        file = %file_info.path.display(),
+                        file = %file_path.display(),
                         error = %e,
                         "Failed to compress log file"
                     );

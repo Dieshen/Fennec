@@ -1,4 +1,4 @@
-use fennec_core::{ErrorCategory, ErrorInfo, ErrorSeverity, RecoveryAction};
+use fennec_core::error::{ErrorCategory, ErrorInfo, ErrorSeverity, RecoveryAction};
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, ProviderError>;
