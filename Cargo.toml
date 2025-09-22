@@ -7,7 +7,8 @@ members = [
     "crates/fennec-memory",
     "crates/fennec-provider",
     "crates/fennec-security",
-    "crates/fennec-core"
+    "crates/fennec-core",
+    "crates/fennec-telemetry"
 ]
 resolver = "2"
 
@@ -43,6 +44,7 @@ thiserror = "1.0"
 # Logging and tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
 
 # HTTP client for providers
 reqwest = { version = "0.11", features = ["json", "stream"] }
@@ -73,6 +75,10 @@ dotenvy = "0.15"
 # Testing utilities
 tempfile = "3.8"
 mockall = "0.12"
+rand = "0.8"
+criterion = "0.5"
+proptest = "1.0"
+serial_test = "2.0"
 
 # Memory service dependencies
 notify = "6.1"
@@ -88,3 +94,4 @@ strip = true
 [profile.dev]
 opt-level = 0
 debug = true
+

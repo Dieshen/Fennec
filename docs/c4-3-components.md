@@ -4,23 +4,68 @@
 Detail the internal components within the CLI container, emphasising how the TUI, orchestration, memory, and command systems interact.
 
 ## Component Catalog
-- **Input Controller**: Normalises keybindings, command palette selection, and chat navigation events.
-- **View Model Layer**: Maintains reactive state for panes (single chat, multi-chat workspace, status bars) and exposes render-ready structs.
-- **Render Engine**: Encapsulates `ratatui` widgets, layout managers, and diffed screen updates.
-- **Session Manager**: Owns active conversations, multi-chat orchestration, and lifecycle hooks for agents.
-- **Subagent Coordinator**: Spawns helper agents, tracks task assignments, and aggregates their responses.
-- **Agent Descriptor Store**: Maintains role definitions, capability flags, memory scopes, and recursion limits for each subagent.
-- **Task Router**: Chooses when to delegate to subagents vs. primary agent, sequences outputs, and resolves conflicts.
-- **Command Registry**: Stores metadata and handlers for default commands (plan, edit, diff, run, search, summarize, scaffold) and user-defined extensions.
-- **Command Executor**: Performs pre-flight checks (sandbox policies, capability requirements), executes commands, and logs outcomes including diff previews.
-- **Command Macro Loader**: Reads macros/recipes from `config/commands.toml` and expands them into executable plans.
-- **Memory Aggregator**: Pulls entries from adapters (`CodexDocAdapter`, `ClaudeDocAdapter`, `MemoryBankAdapter`, `GitHistoryAdapter`) and indexes them.
-- **Memory Index**: Provides semantic + lexical search over aggregated entries and exposes context retrieval API.
-- **Provider Client Factory**: Produces streaming clients for each LLM provider, handling auth, retries, and rate limits.
-- **MCP Client Manager**: Negotiates MCP sessions, capability discovery, and invocation with backpressure controls.
-- **Persistence Manager**: Reads/writes configs, session snapshots, and caches via `serde` formats (JSON/TOML).
-- **Telemetry & Logging**: Centralised `tracing` subscriber with sinks for file logs and optional console overlays.
-- **Audit Trail Writer**: Persists privileged command actions and confirmations for later review.
+
+### Implemented Components (✅ Production Ready)
+
+#### TUI Layer (`fennec-tui`)
+- **App Controller**: Main TUI application with event loop, state management, and security integration
+- **Event Handler**: Keyboard input processing (`crossterm`), command dispatch, and navigation
+- **Layout Manager**: Multi-panel layout with chat, preview, and status panels using `ratatui`
+- **Render Engine**: Widget rendering with syntax highlighting and streaming response display
+- **Theme System**: Configurable UI styling and color schemes
+
+#### Orchestration Layer (`fennec-orchestration`)
+- **Session Manager**: Single-chat coordination, conversation state, and provider integration
+- **Transcript Manager**: Session history persistence with structured storage
+- **Context Injector**: Memory integration for LLM request context enhancement
+- **Response Streamer**: Real-time streaming response handling and display coordination
+
+#### Command System (`fennec-commands`)
+- **Command Registry**: Built-in command catalog with `CommandDescriptor` metadata
+  - Commands: `plan`, `edit`, `run`, `diff`, `summarize`, `enhanced-summarize`
+  - Capability declarations: `ReadFile`, `WriteFile`, `ExecuteShell`, `NetworkAccess`
+- **Command Executor**: Execution engine with preview generation and security validation
+- **File Operations**: Secure file I/O with `similar` crate for diff generation
+- **Command Context**: Execution context with sandbox level and cancellation support
+
+#### Memory System (`fennec-memory`)
+- **Memory Service**: Unified memory management with async operation support
+- **AGENTS.md Adapter**: Repository guidelines integration with Markdown parsing
+- **Cline Memory Adapter**: Compatible with existing `.memory_bank` file formats
+- **Git History Adapter**: Repository analysis using `git2` crate for context
+- **Session Store**: Conversation transcript storage with JSON serialization
+
+#### Security System (`fennec-security`)
+- **Sandbox Policy Engine**: Three-tier model (`ReadOnly`, `WorkspaceWrite`, `FullAccess`)
+- **Approval Manager**: Risk-based workflows with `RiskLevel` classification
+- **Audit System**: Comprehensive logging with `AuditEvent` structures
+  - Event types: Command execution, file operations, security violations
+  - JSON Lines format with structured metadata
+- **Path Validator**: Traversal protection and workspace boundary enforcement
+
+#### Provider System (`fennec-provider`)
+- **OpenAI Client**: Chat Completions API with streaming via `reqwest`
+- **Provider Trait**: Extensible abstraction for future LLM backends
+- **Rate Limiter**: Request throttling and exponential backoff retry logic
+- **Response Handler**: Streaming response processing with error recovery
+
+#### Core Infrastructure (`fennec-core`)
+- **Configuration System**: TOML loading with environment variable substitution
+- **Error Types**: Structured error handling with `thiserror` and `anyhow`
+- **Domain Types**: Shared types for sessions, commands, and providers
+- **Utility Functions**: Common functionality across crates
+
+### Future Components (Roadmap)
+
+#### Advanced Orchestration
+- **Subagent Coordinator**: Multi-agent task delegation and coordination
+- **Task Router**: Agent selection and conflict resolution
+- **Agent Descriptor Store**: Role definitions and capability management
+
+#### External Integration
+- **MCP Client Manager**: Model Context Protocol for external tool integration
+- **Plugin System**: Dynamic command loading and extension support
+- **Macro Expander**: Command sequence automation and scripting
 
 ## Interactions
 1. Input Controller → Session Manager → Command Registry to resolve an action.
@@ -100,11 +145,49 @@ graph LR
 - **Memory Entry Schema**: `{ source, role, scope, tags[], created_at, content, relevance_score, hash }` stored in local index; expose lexical and semantic search endpoints (reference [Cline Memory Bank Notes](./cline_memory_bank.md)).
 - **Audit Log Format**: JSON lines with `{ timestamp, actor, command, capabilities_used[], outcome, confirmation }` rotated per session.
 
-## Open Questions
-- How will we prioritise or rank memory retrieval results (recency vs. relevance weighting)?
-- Should command execution be cancellable mid-flight from the UI?
-- How do we prevent subagent loops or conflicting outputs while keeping UX fluid?
-- What scoring mechanism should Task Router use when reconciling subagent recommendations?
-- How should macro execution failures be surfaced to the user (stop vs continue)?
-- What is the minimal telemetry footprint acceptable for privacy-conscious users?
-- Do we need encryption at rest for audit logs and memory caches?
+## Implementation Details
+
+### Technical Implementation Notes
+
+#### Command Execution Flow (Implemented)
+1. **Input Processing**: Event handler captures user input and parses commands
+2. **Security Validation**: Sandbox policy checks command capabilities against current level
+3. **Preview Generation**: Commands generate structured previews before execution
+4. **Approval Workflow**: High-risk operations trigger interactive confirmation dialogs
+5. **Execution**: Commands execute with audit logging and error handling
+6. **Result Display**: Outcomes displayed in TUI with syntax highlighting
+
+#### Memory System Architecture (Implemented)
+- **Hierarchical Context**: AGENTS.md (global) → Project AGENTS.md → Session context
+- **Caching Strategy**: LRU cache for frequently accessed files and Git queries
+- **Search Implementation**: Fuzzy matching with `fuzzy-matcher` crate for context retrieval
+- **Memory Persistence**: JSON serialization for session data, Markdown for human-readable files
+
+#### Security Architecture (Implemented)
+- **Capability System**: Commands declare required capabilities at registration
+- **Risk Assessment**: Automatic classification of commands and file operations
+- **Audit Trail**: Complete command history with approval status and outcomes
+- **Path Security**: Canonical path resolution with traversal attack prevention
+
+### Performance Optimizations
+
+- **Async Design**: All I/O operations use async Rust patterns for responsiveness
+- **Streaming UI**: Real-time response display with minimal buffering
+- **Memory Management**: Bounded session history with configurable retention
+- **Diff Generation**: Efficient line-by-line comparison with `similar` crate
+
+### Architectural Decisions Resolved
+
+1. **Memory Ranking**: Combination of recency (timestamp) and relevance (fuzzy match score)
+2. **Command Cancellation**: Implemented via `tokio::sync::CancellationToken`
+3. **Telemetry**: Configurable `tracing` levels with optional file output
+4. **Audit Security**: JSON Lines format with sensitive data redaction
+5. **Provider Integration**: Trait-based design allows multiple LLM backends
+6. **Configuration**: Hierarchical TOML with environment variable substitution
+
+### Future Architecture Considerations
+
+- **Plugin Security**: Sandbox policies for community-developed commands
+- **Multi-Provider**: Load balancing and fallback strategies for LLM providers
+- **Distributed Memory**: Shared memory across team members and sessions
+- **Performance Monitoring**: Built-in profiling and performance metrics

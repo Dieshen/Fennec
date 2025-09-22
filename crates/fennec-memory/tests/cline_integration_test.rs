@@ -109,7 +109,7 @@ async fn test_cline_memory_integration() -> Result<()> {
     assert!(progress.is_some());
     let progress_content = progress.unwrap();
     assert!(progress_content.contains("# Progress Tracking"));
-    assert!(progress_content.contains("Completed Tasks: 2"));
+    assert!(progress_content.contains("**Completed Tasks**: 2"));
     assert!(progress_content.contains("Milestone 3 Completion"));
 
     // Test 10: Project lifecycle management
@@ -209,7 +209,13 @@ async fn test_cline_file_templates() -> Result<()> {
     assert!(markdown.contains("- Add more test cases"));
 
     // Test progress template
-    let progress_content = ProgressContent::default();
+    let progress_content = ProgressContent {
+        total_sessions: 0,
+        completed_tasks_count: 0,
+        recent_sessions: Vec::new(),
+        completed_tasks: Vec::new(),
+        achievements: Vec::new(),
+    };
 
     let progress = ClineMemoryFile {
         file_type: ClineFileType::Progress,
@@ -227,8 +233,8 @@ async fn test_cline_file_templates() -> Result<()> {
 
     let markdown = template_engine.render_to_markdown(&progress)?;
     assert!(markdown.contains("# Progress Tracking"));
-    assert!(markdown.contains("Total Sessions: 0"));
-    assert!(markdown.contains("Completed Tasks: 0"));
+    assert!(markdown.contains("**Total Sessions**: 0"));
+    assert!(markdown.contains("**Completed Tasks**: 0"));
 
     Ok(())
 }

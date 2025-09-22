@@ -1130,23 +1130,396 @@ pub struct MemorySearchResults {
 /// Error types specific to memory operations
 #[derive(thiserror::Error, Debug)]
 pub enum MemoryError {
-    #[error("Session not found: {session_id}")]
+    // Session management errors
+    #[error("Session '{session_id}' not found")]
     SessionNotFound { session_id: Uuid },
 
-    #[error("Storage error: {message}")]
-    Storage { message: String },
+    #[error("Session '{session_id}' is not active")]
+    SessionNotActive { session_id: Uuid },
 
-    #[error("Configuration error: {message}")]
-    Configuration { message: String },
+    #[error("Session limit exceeded: {current}/{max} active sessions")]
+    SessionLimitExceeded { current: usize, max: usize },
 
-    #[error("Search error: {message}")]
-    Search { message: String },
+    #[error("Session '{session_id}' already exists")]
+    SessionAlreadyExists { session_id: Uuid },
+
+    // Storage errors with specific context
+    #[error("Failed to initialize memory storage: {reason}")]
+    StorageInitFailed { reason: String },
+
+    #[error("Memory storage corrupted: {component} - {details}")]
+    StorageCorrupted { component: String, details: String },
+
+    #[error("Failed to save memory data: {operation} - {reason}")]
+    StorageSaveFailed { operation: String, reason: String },
+
+    #[error("Failed to load memory data: {operation} - {reason}")]
+    StorageLoadFailed { operation: String, reason: String },
+
+    #[error("Storage capacity exceeded: {current_mb}MB/{limit_mb}MB")]
+    StorageCapacityExceeded { current_mb: u64, limit_mb: u64 },
+
+    // Search and indexing errors
+    #[error("Search query failed: '{query}' - {reason}")]
+    SearchFailed { query: String, reason: String },
+
+    #[error("Search index corrupted for {component}. Rebuild required")]
+    IndexCorrupted { component: String },
+
+    #[error("Search index initialization failed: {reason}")]
+    IndexInitFailed { reason: String },
+
+    #[error("Invalid search query: '{query}' - {issue}")]
+    InvalidSearchQuery { query: String, issue: String },
+
+    #[error("Search timeout: query '{query}' exceeded {timeout_ms}ms")]
+    SearchTimeout { query: String, timeout_ms: u64 },
+
+    // File operations errors
+    #[error("Memory file not found: '{path}'")]
+    FileNotFound { path: String },
+
+    #[error("Failed to watch file '{path}': {reason}")]
+    FileWatchFailed {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("File parsing failed: '{path}' - {reason}")]
+    FileParsingFailed { path: String, reason: String },
+
+    #[error("File format unsupported: '{path}' ({format})")]
+    UnsupportedFileFormat { path: String, format: String },
+
+    // Transcript operations errors
+    #[error("Failed to add message to transcript: {reason}")]
+    TranscriptAddFailed { reason: String },
+
+    #[error("Transcript segment not found: {segment_id}")]
+    TranscriptSegmentNotFound { segment_id: String },
+
+    #[error("Transcript corrupted for session '{session_id}'")]
+    TranscriptCorrupted { session_id: Uuid },
+
+    #[error("Failed to generate transcript summary: {reason}")]
+    TranscriptSummaryFailed { reason: String },
+
+    // Configuration errors
+    #[error("Invalid memory configuration: {setting} = {value}. {suggestion}")]
+    InvalidConfiguration {
+        setting: String,
+        value: String,
+        suggestion: String,
+    },
+
+    #[error("Configuration file not found: '{path}'")]
+    ConfigurationNotFound { path: String },
+
+    #[error("Failed to load configuration: {reason}")]
+    ConfigurationLoadFailed { reason: String },
+
+    // Guidance and agents errors
+    #[error("Agents configuration not found: '{path}'")]
+    AgentsConfigNotFound { path: String },
+
+    #[error("Failed to parse agents configuration: {reason}")]
+    AgentsConfigParsingFailed { reason: String },
+
+    #[error("Guidance matching failed: {pattern} - {reason}")]
+    GuidanceMatchingFailed { pattern: String, reason: String },
+
+    // Memory injection errors
+    #[error("Memory injection failed: {context} - {reason}")]
+    InjectionFailed { context: String, reason: String },
+
+    #[error("Context extraction failed: {source} - {reason}")]
+    ContextExtractionFailed { source: String, reason: String },
+
+    // Serialization and data errors
+    #[error("Serialization failed: {data_type} - {reason}")]
+    SerializationFailed { data_type: String, reason: String },
+
+    #[error("Data validation failed: {field} - {issue}")]
+    DataValidationFailed { field: String, issue: String },
+
+    #[error("Data corruption detected: {component} - {details}")]
+    DataCorrupted { component: String, details: String },
+
+    // Service integration errors
+    #[error("Service initialization failed: {service} - {reason}")]
+    ServiceInitFailed { service: String, reason: String },
+
+    #[error("Service dependency unavailable: {service}")]
+    ServiceUnavailable { service: String },
+
+    // Resource management errors
+    #[error(
+        "Memory limit exceeded: {operation} requires {required_mb}MB, available: {available_mb}MB"
+    )]
+    MemoryLimitExceeded {
+        operation: String,
+        required_mb: u64,
+        available_mb: u64,
+    },
+
+    #[error("Operation timeout: {operation} exceeded {timeout_ms}ms")]
+    OperationTimeout { operation: String, timeout_ms: u64 },
+
+    #[error("Concurrent access limit exceeded: {resource} - {active_count}/{max_count}")]
+    ConcurrencyLimitExceeded {
+        resource: String,
+        active_count: usize,
+        max_count: usize,
+    },
+
+    // IO errors (wrapped for better context)
+    #[error("IO operation failed: {operation} - {source}")]
+    Io {
+        operation: String,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+impl fennec_core::ErrorInfo for MemoryError {
+    fn category(&self) -> fennec_core::ErrorCategory {
+        match self {
+            // User errors
+            MemoryError::SessionNotFound { .. }
+            | MemoryError::InvalidSearchQuery { .. }
+            | MemoryError::FileNotFound { .. }
+            | MemoryError::InvalidConfiguration { .. }
+            | MemoryError::ConfigurationNotFound { .. }
+            | MemoryError::AgentsConfigNotFound { .. }
+            | MemoryError::UnsupportedFileFormat { .. } => fennec_core::ErrorCategory::User,
+
+            // System errors
+            MemoryError::StorageInitFailed { .. }
+            | MemoryError::StorageCorrupted { .. }
+            | MemoryError::StorageSaveFailed { .. }
+            | MemoryError::StorageLoadFailed { .. }
+            | MemoryError::StorageCapacityExceeded { .. }
+            | MemoryError::IndexCorrupted { .. }
+            | MemoryError::IndexInitFailed { .. }
+            | MemoryError::SessionLimitExceeded { .. }
+            | MemoryError::MemoryLimitExceeded { .. }
+            | MemoryError::ConcurrencyLimitExceeded { .. }
+            | MemoryError::Io { .. } => fennec_core::ErrorCategory::System,
+
+            // Internal errors
+            MemoryError::SessionNotActive { .. }
+            | MemoryError::SessionAlreadyExists { .. }
+            | MemoryError::SearchFailed { .. }
+            | MemoryError::SearchTimeout { .. }
+            | MemoryError::FileWatchFailed { .. }
+            | MemoryError::FileParsingFailed { .. }
+            | MemoryError::TranscriptAddFailed { .. }
+            | MemoryError::TranscriptSegmentNotFound { .. }
+            | MemoryError::TranscriptCorrupted { .. }
+            | MemoryError::TranscriptSummaryFailed { .. }
+            | MemoryError::ConfigurationLoadFailed { .. }
+            | MemoryError::AgentsConfigParsingFailed { .. }
+            | MemoryError::GuidanceMatchingFailed { .. }
+            | MemoryError::InjectionFailed { .. }
+            | MemoryError::ContextExtractionFailed { .. }
+            | MemoryError::SerializationFailed { .. }
+            | MemoryError::DataValidationFailed { .. }
+            | MemoryError::DataCorrupted { .. }
+            | MemoryError::ServiceInitFailed { .. }
+            | MemoryError::ServiceUnavailable { .. }
+            | MemoryError::OperationTimeout { .. } => fennec_core::ErrorCategory::Internal,
+        }
+    }
+
+    fn severity(&self) -> fennec_core::ErrorSeverity {
+        match self {
+            // Critical errors that affect system stability
+            MemoryError::StorageCorrupted { .. }
+            | MemoryError::IndexCorrupted { .. }
+            | MemoryError::StorageCapacityExceeded { .. }
+            | MemoryError::MemoryLimitExceeded { .. }
+            | MemoryError::DataCorrupted { .. } => fennec_core::ErrorSeverity::Critical,
+
+            // Errors that prevent operation but don't affect stability
+            MemoryError::SessionLimitExceeded { .. }
+            | MemoryError::ConcurrencyLimitExceeded { .. }
+            | MemoryError::StorageInitFailed { .. }
+            | MemoryError::IndexInitFailed { .. }
+            | MemoryError::ServiceInitFailed { .. }
+            | MemoryError::ServiceUnavailable { .. } => fennec_core::ErrorSeverity::Error,
+
+            // Warning-level errors that may indicate issues
+            MemoryError::SearchTimeout { .. }
+            | MemoryError::OperationTimeout { .. }
+            | MemoryError::FileWatchFailed { .. } => fennec_core::ErrorSeverity::Warning,
+
+            // Standard errors
+            _ => fennec_core::ErrorSeverity::Error,
+        }
+    }
+
+    fn recovery_actions(&self) -> Vec<fennec_core::RecoveryAction> {
+        match self {
+            MemoryError::SessionNotFound { .. } => {
+                vec![fennec_core::RecoveryAction::ManualAction(
+                    "Start a new session or check session ID".to_string(),
+                )]
+            }
+
+            MemoryError::StorageCorrupted { component, .. } => {
+                vec![
+                    fennec_core::RecoveryAction::ManualAction(format!(
+                        "Rebuild {} storage from backup",
+                        component
+                    )),
+                    fennec_core::RecoveryAction::ContactSupport(
+                        "Data recovery may be needed".to_string(),
+                    ),
+                ]
+            }
+
+            MemoryError::IndexCorrupted { component } => {
+                vec![
+                    fennec_core::RecoveryAction::ManualAction(format!(
+                        "Rebuild search index for {}",
+                        component
+                    )),
+                    fennec_core::RecoveryAction::RetryWithChanges(
+                        "Clear cache and restart".to_string(),
+                    ),
+                ]
+            }
+
+            MemoryError::SessionLimitExceeded { max, .. } => {
+                vec![
+                    fennec_core::RecoveryAction::ManualAction("Close unused sessions".to_string()),
+                    fennec_core::RecoveryAction::CheckConfiguration(format!(
+                        "Increase session limit (current: {})",
+                        max
+                    )),
+                ]
+            }
+
+            MemoryError::StorageCapacityExceeded { limit_mb, .. } => {
+                vec![
+                    fennec_core::RecoveryAction::ManualAction(
+                        "Clean up old memory data".to_string(),
+                    ),
+                    fennec_core::RecoveryAction::CheckConfiguration(format!(
+                        "Increase storage limit (current: {}MB)",
+                        limit_mb
+                    )),
+                ]
+            }
+
+            MemoryError::FileNotFound { .. } => {
+                vec![
+                    fennec_core::RecoveryAction::ManualAction(
+                        "Check file path and permissions".to_string(),
+                    ),
+                    fennec_core::RecoveryAction::CheckConfiguration(
+                        "Verify file location in configuration".to_string(),
+                    ),
+                ]
+            }
+
+            MemoryError::InvalidSearchQuery { issue, .. } => {
+                vec![fennec_core::RecoveryAction::RetryWithChanges(format!(
+                    "Fix query: {}",
+                    issue
+                ))]
+            }
+
+            MemoryError::InvalidConfiguration { suggestion, .. } => {
+                vec![fennec_core::RecoveryAction::CheckConfiguration(
+                    suggestion.clone(),
+                )]
+            }
+
+            MemoryError::ServiceUnavailable { service } => {
+                vec![
+                    fennec_core::RecoveryAction::Retry,
+                    fennec_core::RecoveryAction::CheckConfiguration(format!(
+                        "Verify {} service configuration",
+                        service
+                    )),
+                ]
+            }
+
+            // Most errors benefit from retry
+            _ => vec![
+                fennec_core::RecoveryAction::Retry,
+                fennec_core::RecoveryAction::ContactSupport(
+                    "If the problem persists, check logs for details".to_string(),
+                ),
+            ],
+        }
+    }
+
+    fn user_message(&self) -> String {
+        match self {
+            MemoryError::SessionNotFound { .. } => {
+                "Session not found. Please start a new session.".to_string()
+            }
+            MemoryError::StorageCorrupted { .. } => {
+                "Memory storage is corrupted. Please restart the application.".to_string()
+            }
+            MemoryError::SessionLimitExceeded { .. } => {
+                "Too many active sessions. Please close some sessions.".to_string()
+            }
+            MemoryError::StorageCapacityExceeded { .. } => {
+                "Memory storage is full. Please clean up old data.".to_string()
+            }
+            MemoryError::SearchFailed { .. } => {
+                "Search failed. Please try a different query.".to_string()
+            }
+            MemoryError::FileNotFound { .. } => {
+                "Memory file not found. Please check the file path.".to_string()
+            }
+            MemoryError::InvalidSearchQuery { .. } => {
+                "Invalid search query. Please check your search terms.".to_string()
+            }
+            MemoryError::ServiceUnavailable { service } => format!(
+                "{} service is unavailable. Please try again later.",
+                service
+            ),
+            _ => "A memory operation failed. Please try again.".to_string(),
+        }
+    }
+
+    fn debug_context(&self) -> Option<String> {
+        match self {
+            MemoryError::StorageCorrupted { component, details } => {
+                Some(format!("Component: {}, Details: {}", component, details))
+            }
+            MemoryError::SearchTimeout { query, timeout_ms } => {
+                Some(format!("Query: {}, Timeout: {}ms", query, timeout_ms))
+            }
+            MemoryError::MemoryLimitExceeded {
+                operation,
+                required_mb,
+                available_mb,
+            } => Some(format!(
+                "Operation: {}, Required: {}MB, Available: {}MB",
+                operation, required_mb, available_mb
+            )),
+            _ => None,
+        }
+    }
 }
 
 impl From<MemoryError> for FennecError {
     fn from(err: MemoryError) -> Self {
-        FennecError::Memory {
-            message: err.to_string(),
+        FennecError::Memory(Box::new(err))
+    }
+}
+
+impl From<std::io::Error> for MemoryError {
+    fn from(err: std::io::Error) -> Self {
+        MemoryError::Io {
+            operation: "file operation".to_string(),
+            source: err,
         }
     }
 }

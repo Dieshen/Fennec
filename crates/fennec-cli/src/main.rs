@@ -4,9 +4,9 @@ use fennec_core::config::Config;
 use fennec_orchestration::SessionManager;
 use fennec_security::audit::AuditLogger;
 use fennec_security::{create_sandbox_policy, ApprovalManager};
+use fennec_telemetry::{LogFormat, LogLevel, TelemetryConfig, TelemetrySystem};
 use fennec_tui::app::App;
 use tracing::{error, info, warn};
-use tracing_subscriber;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -50,9 +50,57 @@ struct Cli {
     #[arg(long, help = "Path to configuration file")]
     config: Option<std::path::PathBuf>,
 
-    /// Enable verbose logging
-    #[arg(short, long, help = "Enable verbose logging")]
+    /// Enable verbose logging (deprecated - use --log-level debug instead)
+    #[arg(short, long, help = "Enable verbose logging (deprecated)")]
     verbose: bool,
+
+    /// Set log level (trace, debug, info, warn, error)
+    #[arg(long, help = "Set log level")]
+    log_level: Option<String>,
+
+    /// Set log format (json, pretty, compact)
+    #[arg(long, help = "Set log output format")]
+    log_format: Option<String>,
+
+    /// Enable file logging
+    #[arg(long, help = "Enable logging to files")]
+    file_logging: bool,
+
+    /// Disable file logging
+    #[arg(
+        long,
+        conflicts_with = "file_logging",
+        help = "Disable logging to files"
+    )]
+    no_file_logging: bool,
+
+    /// Set log directory
+    #[arg(long, help = "Directory for log files")]
+    log_dir: Option<std::path::PathBuf>,
+
+    /// Enable telemetry and metrics collection
+    #[arg(long, help = "Enable telemetry and metrics")]
+    telemetry: bool,
+
+    /// Disable telemetry and metrics collection
+    #[arg(
+        long,
+        conflicts_with = "telemetry",
+        help = "Disable telemetry and metrics"
+    )]
+    no_telemetry: bool,
+
+    /// Enable performance metrics
+    #[arg(long, help = "Enable performance timing metrics")]
+    metrics: bool,
+
+    /// Disable log sanitization (WARNING: may log sensitive data)
+    #[arg(long, help = "Disable log data sanitization (UNSAFE)")]
+    no_sanitize: bool,
+
+    /// Telemetry configuration file
+    #[arg(long, help = "Path to telemetry configuration file")]
+    telemetry_config: Option<std::path::PathBuf>,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -81,6 +129,97 @@ impl From<SandboxMode> for fennec_security::SandboxLevel {
     }
 }
 
+/// Create telemetry configuration from CLI arguments
+async fn create_telemetry_config(cli: &Cli) -> Result<TelemetryConfig> {
+    // Load base configuration from file if specified
+    let mut config = if let Some(telemetry_config_path) = &cli.telemetry_config {
+        TelemetryConfig::load(Some(telemetry_config_path)).await?
+    } else {
+        TelemetryConfig::default()
+    };
+
+    // Apply CLI overrides
+
+    // Global telemetry enable/disable
+    if cli.no_telemetry {
+        config.enabled = false;
+        return Ok(config);
+    }
+    if cli.telemetry {
+        config.enabled = true;
+    }
+
+    // Log level (handle both verbose flag and explicit log-level)
+    if let Some(log_level_str) = &cli.log_level {
+        config.logging.level = match log_level_str.to_lowercase().as_str() {
+            "trace" => LogLevel::Trace,
+            "debug" => LogLevel::Debug,
+            "info" => LogLevel::Info,
+            "warn" => LogLevel::Warn,
+            "error" => LogLevel::Error,
+            _ => {
+                warn!("Invalid log level '{}', using default", log_level_str);
+                config.logging.level
+            }
+        };
+    } else if cli.verbose {
+        config.logging.level = LogLevel::Debug;
+    }
+
+    // Log format
+    if let Some(log_format_str) = &cli.log_format {
+        config.logging.format = match log_format_str.to_lowercase().as_str() {
+            "json" => LogFormat::Json,
+            "pretty" => LogFormat::Pretty,
+            "compact" => LogFormat::Compact,
+            _ => {
+                warn!("Invalid log format '{}', using default", log_format_str);
+                config.logging.format
+            }
+        };
+    }
+
+    // File logging
+    if cli.no_file_logging {
+        config.logging.file_enabled = false;
+    } else if cli.file_logging {
+        config.logging.file_enabled = true;
+    }
+
+    // Log directory
+    if let Some(log_dir) = &cli.log_dir {
+        config.logging.log_dir = log_dir.clone();
+    }
+
+    // Metrics
+    if cli.metrics {
+        config.metrics.enabled = true;
+        config.metrics.performance_timing = true;
+    }
+
+    // Sanitization
+    if cli.no_sanitize {
+        warn!("Log sanitization disabled - sensitive data may be logged!");
+        config.privacy.sanitize_enabled = false;
+    }
+
+    // Load environment overrides
+    config.load_env_overrides();
+
+    info!(
+        telemetry.event = "telemetry_config_created",
+        enabled = config.enabled,
+        log_level = ?config.logging.level,
+        log_format = ?config.logging.format,
+        file_logging = config.logging.file_enabled,
+        metrics = config.metrics.enabled,
+        sanitization = config.privacy.sanitize_enabled,
+        "Telemetry configuration created"
+    );
+
+    Ok(config)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables before parsing configuration
@@ -88,15 +227,12 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    // Initialize tracing based on verbosity or environment
-    let env_filter = if cli.verbose {
-        tracing_subscriber::EnvFilter::new("debug")
-    } else {
-        tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
-    };
-
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    // Initialize telemetry system
+    let telemetry_config = create_telemetry_config(&cli).await?;
+    let _telemetry_guard = TelemetrySystem::init(telemetry_config).await.map_err(|e| {
+        eprintln!("Failed to initialize telemetry system: {}", e);
+        anyhow::anyhow!("Telemetry initialization failed: {}", e)
+    })?;
 
     info!("Starting Fennec AI Assistant");
     info!("Sandbox level: {:?}", cli.sandbox);

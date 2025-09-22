@@ -20,6 +20,11 @@ directories.workspace = true
 tokio.workspace = true
 futures.workspace = true
 async-trait = "0.1"
+fennec-telemetry = { path = "../fennec-telemetry", optional = true }
+
+[features]
+default = ["telemetry"]
+telemetry = ["fennec-telemetry"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

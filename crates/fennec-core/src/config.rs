@@ -10,6 +10,15 @@ pub struct Config {
     pub security: SecurityConfig,
     pub memory: MemoryConfig,
     pub tui: TuiConfig,
+    #[cfg(feature = "telemetry")]
+    pub telemetry: Option<TelemetryConfigRef>,
+}
+
+#[cfg(feature = "telemetry")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelemetryConfigRef {
+    pub config_path: Option<PathBuf>,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +83,11 @@ impl Default for Config {
                     clear: "Ctrl+L".to_string(),
                 },
             },
+            #[cfg(feature = "telemetry")]
+            telemetry: Some(TelemetryConfigRef {
+                config_path: None,
+                enabled: true,
+            }),
         }
     }
 }

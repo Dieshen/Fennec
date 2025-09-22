@@ -29,14 +29,18 @@ async fn test_command_registry_initialization() -> Result<()> {
 
     // Verify all built-in commands are registered
     let commands = registry.list_commands().await;
-    assert_eq!(commands.len(), 5);
-
     let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
+
+    // Expect the original five commands plus the enhanced summarize command
     assert!(command_names.contains(&"plan".to_string()));
     assert!(command_names.contains(&"edit".to_string()));
     assert!(command_names.contains(&"run".to_string()));
     assert!(command_names.contains(&"diff".to_string()));
     assert!(command_names.contains(&"summarize".to_string()));
+    assert!(command_names.contains(&"summarize_enhanced".to_string()));
+
+    // Ensure we didn't unintentionally register duplicates
+    assert_eq!(command_names.len(), 6);
 
     Ok(())
 }

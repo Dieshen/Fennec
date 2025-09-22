@@ -1,0 +1,56 @@
+[package]
+name = "fennec-telemetry"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Comprehensive telemetry, logging, and observability for Fennec"
+
+[dependencies]
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+futures.workspace = true
+directories.workspace = true
+
+# Tracing and logging
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "json", "fmt", "time", "local-time"] }
+tracing-appender = "0.2"
+
+# File system and compression
+flate2 = "1.0"
+walkdir.workspace = true
+
+# Metrics
+metrics = "0.22"
+metrics-exporter-prometheus = { version = "0.13", optional = true }
+
+# Regex for sanitization
+regex = "1.10"
+
+# File metadata
+filetime = "0.2"
+
+# Async utilities
+tokio-util.workspace = true
+async-trait = "0.1"
+
+# Configuration
+toml.workspace = true
+
+[features]
+default = ["file-logging", "metrics"]
+file-logging = []
+metrics = []
+prometheus = ["metrics-exporter-prometheus"]
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

@@ -1,6 +1,7 @@
 pub mod common;
 pub mod diff;
 pub mod edit;
+pub mod error;
 pub mod file_ops;
 pub mod plan;
 pub mod registry;
@@ -13,6 +14,7 @@ mod tests;
 
 // Re-export key types and functions for easy use
 pub use common::{format_file_size, initialize_builtin_commands, is_text_file, truncate_text};
+pub use error::{CommandError, Result as CommandResult};
 pub use registry::{
     CommandContext, CommandDescriptor, CommandExecutionResult, CommandExecutor, CommandRegistry,
 };

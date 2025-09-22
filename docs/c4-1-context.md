@@ -4,10 +4,12 @@
 Outline how the Fennec AI CLI fits into a developer's workflow, the actors that interact with it, and the high-level responsibilities of the system.
 
 ## Scope
-- Single-chat experience (initial milestone)
-- Planned multi-chat orchestration and helper subagents (planner, reviewer, executor roles)
-- Support for OpenAI, OpenRouter, Anthropic, and Ollama providers
-- Integration with MCP servers (Codex, Claude Code) and local file system operations
+- **Production Ready**: Single-chat experience with comprehensive TUI (✅ Implemented)
+- **Provider Support**: OpenAI integration with extensible architecture for Anthropic, OpenRouter, Ollama (✅ OpenAI Complete)
+- **Security Model**: Three-tier sandbox system with approval workflows and audit trails (✅ Implemented)
+- **Memory System**: AGENTS.md integration, Cline-style memory files, and session persistence (✅ Implemented)
+- **Command System**: Plan, edit, run, diff, summarize with preview and confirmation flows (✅ Implemented)
+- **Future Roadmap**: Multi-chat orchestration, helper subagents, and MCP server integration
 
 ## Primary Actors
 - **Developer Operator**: Launches the CLI, issues commands, navigates the TUI.
@@ -16,16 +18,26 @@ Outline how the Fennec AI CLI fits into a developer's workflow, the actors that 
 - **MCP Servers**: External procedure hosts exposing additional tools and automation.
 
 ## System Responsibilities
-- Provide a performant TUI for interactive agent sessions.
-- Manage a unified memory layer combining `AGENTS.md`, `CLAUDE.md`, `.memory_bank`, and git history insights.
-- Execute built-in and custom commands safely, surfacing previews and guardrails.
-- Coordinate helper subagents and route conversational turns across single or multi-chat modes.
+- **TUI Interface**: Provide responsive terminal interface with ratatui and crossterm (✅ fennec-tui crate)
+- **Memory Management**: Unified memory layer with AGENTS.md, Cline-style files, and session transcripts (✅ fennec-memory crate)
+- **Command Execution**: Safe command execution with sandbox policies and approval workflows (✅ fennec-commands + fennec-security)
+- **Provider Integration**: Streaming LLM integration with OpenAI Chat Completions API (✅ fennec-provider crate)
+- **Session Orchestration**: Session management with audit logging and context preservation (✅ fennec-orchestration crate)
+- **Security Enforcement**: Three-tier sandbox with capability-based permissions and audit trails (✅ fennec-security crate)
 
 ## External Dependencies & Trust Boundaries
-- Network calls to hosted LLM APIs (OpenAI, Anthropic, OpenRouter).
-- Local socket or HTTP access to Ollama.
-- MCP protocol communication with Codex and Claude Code servers.
-- Local file system read/write restricted by sandbox policies.
+
+### Implemented Dependencies
+- **OpenAI API**: HTTPS requests to api.openai.com with API key authentication (✅ fennec-provider)
+- **Local Filesystem**: Read/write operations constrained by sandbox policies and workspace boundaries (✅ fennec-security)
+- **Git Integration**: Repository analysis and history awareness for context (✅ fennec-memory)
+- **Environment Configuration**: .env files, OS keyring, and user config directories (✅ fennec-core)
+
+### Future Dependencies
+- **Anthropic API**: Claude API integration for additional provider choice
+- **Ollama**: Local LLM runtime for offline functionality
+- **OpenRouter**: Multi-provider API gateway
+- **MCP Servers**: Model Context Protocol for external tool integration
 
 ## Quality Attributes
 - Low-latency interactive feedback in the terminal UI.
@@ -54,7 +66,26 @@ graph TD
 - [Codex CLI Feature Inventory](./codex_featurelist.md) — captures sandboxing, approval, and configuration patterns we aim to match.
 - [Cline Memory Bank Notes](./cline_memory_bank.md) — informs unified memory design and recall behavior.
 
-## Open Questions
-- How will credentials be supplied (env vars, keyring, config files)?
-- What telemetry or analytics, if any, will the system emit?
-- Are there future external systems (issue trackers, knowledge bases) to anticipate?
+## Implementation Notes
+
+### Completed Features (MVP Ready)
+- **Credential Management**: Environment variables (.env), OS keyring support planned, TOML configuration files
+- **Telemetry**: Structured tracing with configurable levels, audit logging in JSON Lines format
+- **Command Registry**: Extensible system with built-in commands (plan, edit, run, diff, summarize, enhanced-summarize)
+- **Security Model**: PolicyResult enum with Allow/Deny/RequireApproval, risk-based command classification
+- **Memory Architecture**: Adapters for AGENTS.md, Cline-style files, Git history, with search capabilities
+
+### Architecture Decisions Made
+- **Rust Workspace**: Modular design with 8 crates for clear separation of concerns
+- **Async Runtime**: Tokio for all async operations with streaming LLM responses
+- **Error Handling**: `thiserror` for structured errors, `anyhow` for error context
+- **Configuration**: TOML files with environment variable substitution
+- **TUI Framework**: ratatui with crossterm for cross-platform terminal support
+- **Security**: Capability-based permissions with sandbox policy enforcement
+
+### Technical Debt and Improvements
+- Add support for additional LLM providers (Anthropic, Ollama)
+- Implement MCP server integration for external tools
+- Add semantic search with embeddings for memory system
+- Implement multi-chat orchestration and subagent coordination
+- Add plugin system for custom commands and workflows

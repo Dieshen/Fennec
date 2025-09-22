@@ -19,62 +19,41 @@
 //! ## Usage
 //!
 //! ```rust,no_run
-//! use fennec_memory::{MemoryService, MemoryConfig, NoteCategory, PlanStatus};
-//! use fennec_core::session::Session;
+//! use fennec_core::{
+//!     session::Session,
+//!     transcript::MessageRole,
+//! };
+//! use fennec_memory::create_memory_service;
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
 //!     // Create memory service with default configuration
-//!     let memory = MemoryService::new().await?;
+//!     let memory = create_memory_service().await?;
 //!
 //!     // Start tracking a session
 //!     let session = Session::new();
 //!     memory.start_session(session.clone()).await?;
 //!
 //!     // Add messages to the conversation
-//!     memory.add_message(
-//!         session.id,
-//!         fennec_core::transcript::MessageRole::User,
-//!         "I need to implement a Rust web API".to_string()
-//!     ).await?;
+//!     memory
+//!         .add_message(
+//!             session.id,
+//!             MessageRole::User,
+//!             "I'm working on an AI CLI in Rust".to_string(),
+//!         )
+//!         .await?;
+//!     memory
+//!         .add_message(
+//!             session.id,
+//!             MessageRole::Assistant,
+//!             "Great! Remember to enforce sandbox policies for safety.".to_string(),
+//!         )
+//!         .await?;
 //!
-//!     // Create a plan for the implementation
-//!     let plan_id = memory.create_plan(
-//!         session.id,
-//!         "Rust Web API Implementation".to_string(),
-//!         "Build a REST API using Axum framework".to_string()
-//!     ).await?;
-//!
-//!     // Add steps to the plan
-//!     let step_id = memory.add_plan_step(
-//!         plan_id,
-//!         "Set up project structure with Cargo.toml".to_string(),
-//!         vec![]
-//!     ).await?;
-//!
-//!     // Create a note for important decisions
-//!     let note_id = memory.create_note(
-//!         Some(session.id),
-//!         "Technology Choice".to_string(),
-//!         "Decided on Axum for its async performance and ecosystem".to_string(),
-//!         NoteCategory::Decision
-//!     ).await?;
-//!
-//!     // Link the note to the plan
-//!     memory.link_note_to_plan(note_id, plan_id).await?;
-//!
-//!     // Get comprehensive session memory summary
-//!     let summary = memory.get_session_memory_summary(session.id).await?;
-//!     println!("Session has {} plans and {} notes", summary.plans_count, summary.notes_count);
-//!
-//!     // Get relevant memory injection for AI prompts
-//!     let injection = memory.get_memory_injection(
-//!         session.id,
-//!         Some("rust web api")
-//!     ).await?;
-//!
-//!     println!("Found {} guidance matches", injection.guidance.len());
-//!     println!("Found {} conversation matches", injection.conversation_history.len());
+//!     // Retrieve memory injection for the current session
+//!     let injection = memory.get_memory_injection(session.id, None).await?;
+//!     println!("Guidance items: {}", injection.guidance.len());
+//!     println!("Transcript matches: {}", injection.conversation_history.len());
 //!
 //!     Ok(())
 //! }

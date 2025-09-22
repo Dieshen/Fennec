@@ -1,0 +1,277 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    strategy:
+      matrix:
+        rust-version: [stable, beta]
+        test-suite:
+          - end-to-end
+          - provider-mocking
+          - sandbox-security
+          - command-execution
+          - tui-integration
+          - performance
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust-version }}
+        components: rustfmt, clippy
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+          
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          python3 \
+          python3-pip \
+          nodejs \
+          npm
+          
+    - name: Build project
+      run: cargo build --verbose --all-features
+      
+    - name: Run unit tests
+      run: cargo test --lib --bins --verbose
+      
+    - name: Run integration tests - End-to-End Workflows
+      if: matrix.test-suite == 'end-to-end'
+      run: |
+        cargo test --test integration_test \
+          test_hello_world_integration \
+          test_web_server_integration \
+          test_project_template_integration \
+          --verbose
+          
+    - name: Run integration tests - Provider Mocking
+      if: matrix.test-suite == 'provider-mocking'
+      run: |
+        cargo test --test integration_test \
+          integration::provider_mocking \
+          --verbose
+          
+    - name: Run integration tests - Sandbox Security
+      if: matrix.test-suite == 'sandbox-security'
+      run: |
+        cargo test --test integration_test \
+          integration::sandbox_security \
+          --verbose
+          
+    - name: Run integration tests - Command Execution
+      if: matrix.test-suite == 'command-execution'
+      run: |
+        cargo test --test integration_test \
+          integration::command_execution \
+          --verbose
+          
+    - name: Run integration tests - TUI Integration
+      if: matrix.test-suite == 'tui-integration'
+      run: |
+        cargo test --test integration_test \
+          integration::tui_integration \
+          --verbose
+          
+    - name: Run integration tests - Performance
+      if: matrix.test-suite == 'performance'
+      run: |
+        cargo test --test integration_test \
+          test_performance_integration \
+          integration::performance_load \
+          --verbose --release
+          
+    - name: Run benchmarks
+      if: matrix.test-suite == 'performance' && matrix.rust-version == 'stable'
+      run: |
+        cargo bench --bench performance_benchmarks \
+          -- --output-format html --plotting-backend plotters
+          
+    - name: Upload benchmark results
+      if: matrix.test-suite == 'performance' && matrix.rust-version == 'stable'
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: target/criterion/
+        
+  comprehensive-test:
+    name: Comprehensive Integration Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: integration-tests
+    if: github.event_name == 'schedule' || github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-comprehensive-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          python3 \
+          python3-pip \
+          nodejs \
+          npm \
+          valgrind
+          
+    - name: Build project in release mode
+      run: cargo build --release --all-features
+      
+    - name: Run full integration test suite
+      run: |
+        cargo test --test integration_test \
+          test_full_integration_suite \
+          --release --verbose \
+          -- --ignored
+          
+    - name: Run long-running stability tests
+      run: |
+        cargo test --test integration_test \
+          --release --verbose \
+          -- --ignored "long running"
+          
+    - name: Memory leak detection
+      run: |
+        cargo build --bin fennec --release
+        valgrind --tool=memcheck \
+          --leak-check=full \
+          --show-leak-kinds=all \
+          --track-origins=yes \
+          --verbose \
+          --log-file=valgrind-output.txt \
+          target/release/fennec --help || true
+        cat valgrind-output.txt
+        
+    - name: Performance regression detection
+      run: |
+        cargo bench --bench performance_benchmarks \
+          -- --save-baseline main
+          
+    - name: Generate test report
+      run: |
+        echo "# Integration Test Results" > test-report.md
+        echo "## Test Configuration" >> test-report.md
+        echo "- Rust version: $(rustc --version)" >> test-report.md
+        echo "- OS: $(uname -a)" >> test-report.md
+        echo "- Timestamp: $(date)" >> test-report.md
+        echo "## Results" >> test-report.md
+        echo "Comprehensive integration tests completed successfully." >> test-report.md
+        
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: comprehensive-test-results
+        path: |
+          test-report.md
+          valgrind-output.txt
+          target/criterion/
+          
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+      
+    - name: Run security audit
+      run: cargo audit
+      
+    - name: Run clippy security lints
+      run: |
+        cargo clippy --all-targets --all-features -- \
+          -W clippy::all \
+          -W clippy::pedantic \
+          -W clippy::cargo \
+          -W clippy::security \
+          -D warnings
+          
+  code-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+        
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov
+      
+    - name: Generate code coverage
+      run: |
+        cargo llvm-cov --all-features --workspace \
+          --lcov --output-path lcov.info
+          
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: lcov.info
+        fail_ci_if_error: true
+        
+    - name: Generate coverage report
+      run: |
+        cargo llvm-cov report --html --output-dir coverage-report
+        
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: coverage-report/

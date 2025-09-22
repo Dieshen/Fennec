@@ -17,6 +17,7 @@ fennec-core = { path = "../fennec-core" }
 fennec-tui = { path = "../fennec-tui" }
 fennec-orchestration = { path = "../fennec-orchestration" }
 fennec-security = { path = "../fennec-security" }
+fennec-telemetry = { path = "../fennec-telemetry" }
 
 # External dependencies
 clap.workspace = true
