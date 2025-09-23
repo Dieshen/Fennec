@@ -9,8 +9,11 @@ use tracing_subscriber::{layer::Context, Layer};
 
 /// Layer that sanitizes sensitive data from log messages
 pub struct SanitizationLayer {
+    #[allow(dead_code)]
     redaction_patterns: Vec<Regex>,
+    #[allow(dead_code)]
     redacted_fields: Vec<String>,
+    #[allow(dead_code)]
     audit_trail: bool,
 }
 
@@ -34,6 +37,7 @@ impl SanitizationLayer {
     }
 
     /// Sanitize a log message
+    #[allow(dead_code)]
     fn sanitize_message(&self, message: &str) -> String {
         let mut sanitized = message.to_string();
 
@@ -54,6 +58,7 @@ impl SanitizationLayer {
     }
 
     /// Sanitize structured data (JSON values)
+    #[allow(dead_code)]
     fn sanitize_structured_data(&self, value: &mut Value) {
         match value {
             Value::Object(map) => {
@@ -82,6 +87,7 @@ impl SanitizationLayer {
     }
 
     /// Create an audit log entry for redacted content
+    #[allow(dead_code)]
     fn create_audit_entry(&self, original_len: usize, sanitized_len: usize) {
         if self.audit_trail && original_len != sanitized_len {
             tracing::debug!(
@@ -242,6 +248,7 @@ impl DataSanitizer {
     }
 
     /// Redact credit card numbers (keep first 4 and last 4 digits)
+    #[allow(dead_code)]
     fn redact_credit_card(&self, cc_number: &str) -> String {
         let digits: String = cc_number.chars().filter(|c| c.is_ascii_digit()).collect();
 

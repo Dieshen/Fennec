@@ -327,6 +327,7 @@ mod tests {
             Self { buf: Vec::new() }
         }
 
+        #[allow(dead_code)]
         fn contents(&self) -> String {
             String::from_utf8_lossy(&self.buf).to_string()
         }

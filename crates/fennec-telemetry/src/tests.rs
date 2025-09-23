@@ -379,6 +379,9 @@ mod integration_tests {
     fn test_configuration_validation() {
         let mut config = TelemetryConfig::default();
 
+        // Disable file logging to avoid filesystem permission issues in tests
+        config.logging.file_enabled = false;
+
         // Valid configuration should pass
         assert!(config.validate().is_ok());
 

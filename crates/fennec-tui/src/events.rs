@@ -1,5 +1,6 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -110,6 +111,10 @@ pub struct EventHandler {
     last_tick: Instant,
     /// Tick rate for periodic updates
     tick_rate: Duration,
+    /// Last key event for duplicate detection
+    last_key_event: Option<(KeyEvent, Instant)>,
+    /// Duplicate threshold for key events
+    duplicate_threshold: Duration,
 }
 
 impl EventHandler {
@@ -123,6 +128,8 @@ impl EventHandler {
             input_mode: InputMode::Normal,
             last_tick: Instant::now(),
             tick_rate,
+            last_key_event: None,
+            duplicate_threshold: Duration::from_millis(50), // 50ms threshold for duplicate detection
         }
     }
 
@@ -166,6 +173,29 @@ impl EventHandler {
 
     /// Handle keyboard input and return the corresponding action
     pub fn handle_key_event(&mut self, key: KeyEvent) -> KeyAction {
+        // CRITICAL FIX: Only process Press events, ignore Release events
+        if key.kind == KeyEventKind::Release {
+            return KeyAction::None;
+        }
+
+        let now = Instant::now();
+
+        // Check for duplicate events within threshold
+        if let Some((last_key, last_time)) = self.last_key_event {
+            let time_diff = now.duration_since(last_time);
+            if last_key == key && time_diff < self.duplicate_threshold {
+                return KeyAction::None;
+            }
+        }
+
+        self.last_key_event = Some((key, now));
+
+        // Check for global keys that work in ANY mode FIRST
+        if let Some(global_action) = self.handle_global_key(key) {
+            return global_action;
+        }
+
+        // Then handle mode-specific keys
         match self.input_mode {
             InputMode::Normal => self.handle_normal_mode_key(key),
             InputMode::Insert => self.handle_insert_mode_key(key),
@@ -174,14 +204,39 @@ impl EventHandler {
         }
     }
 
+    /// Handle global keys that work in any mode
+    fn handle_global_key(&self, key: KeyEvent) -> Option<KeyAction> {
+        match (key.modifiers, key.code) {
+            // Global quit - works in any mode
+            (KeyModifiers::CONTROL, KeyCode::Char('c')) => Some(KeyAction::Quit),
+
+            // Global pane navigation - works in any mode
+            (KeyModifiers::NONE, KeyCode::Tab) => Some(KeyAction::FocusNext),
+            (KeyModifiers::SHIFT, KeyCode::BackTab) => Some(KeyAction::FocusPrevious),
+
+            // Global theme toggle - works in any mode (use Ctrl+T to avoid conflicts)
+            (KeyModifiers::CONTROL, KeyCode::Char('t')) => Some(KeyAction::ToggleTheme),
+
+            // Global preview toggle - works in any mode (use Ctrl+P to avoid conflicts)
+            (KeyModifiers::CONTROL, KeyCode::Char('p')) => Some(KeyAction::TogglePreview),
+
+            // Global help - works in any mode
+            (KeyModifiers::NONE, KeyCode::F(1)) => Some(KeyAction::ShowHelp),
+            (KeyModifiers::CONTROL, KeyCode::Char('?')) => Some(KeyAction::ShowHelp),
+
+            // Global quit in normal mode only (to avoid conflicts with insert mode)
+            (KeyModifiers::NONE, KeyCode::Char('q')) if self.input_mode == InputMode::Normal => {
+                Some(KeyAction::Quit)
+            }
+
+            _ => None,
+        }
+    }
+
     /// Handle key events in normal mode
     fn handle_normal_mode_key(&self, key: KeyEvent) -> KeyAction {
         match (key.modifiers, key.code) {
-            // Quit with Ctrl+C or 'q'
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) => KeyAction::Quit,
-            (KeyModifiers::NONE, KeyCode::Char('q')) => KeyAction::Quit,
-
-            // Mode switches
+            // Mode switches (only work in normal mode)
             (KeyModifiers::NONE, KeyCode::Char('i')) => KeyAction::EnterInsert,
             (KeyModifiers::NONE, KeyCode::Char(':')) => KeyAction::EnterCommand,
             (KeyModifiers::NONE, KeyCode::Char('/')) => KeyAction::EnterSearch,
@@ -212,17 +267,14 @@ impl EventHandler {
             (KeyModifiers::NONE, KeyCode::Home) => KeyAction::GoToTop,
             (KeyModifiers::NONE, KeyCode::End) => KeyAction::GoToBottom,
 
-            // Pane navigation
-            (KeyModifiers::NONE, KeyCode::Tab) => KeyAction::FocusNext,
-            (KeyModifiers::SHIFT, KeyCode::BackTab) => KeyAction::FocusPrevious,
-
-            // UI toggles
+            // UI toggles (mode-specific, use single keys)
             (KeyModifiers::NONE, KeyCode::Char('t')) => KeyAction::ToggleTheme,
             (KeyModifiers::NONE, KeyCode::Char('p')) => KeyAction::TogglePreview,
 
             // Copy/paste
             (KeyModifiers::CONTROL, KeyCode::Char('y')) => KeyAction::Copy,
-            (KeyModifiers::CONTROL, KeyCode::Char('p')) => KeyAction::Paste,
+            // Note: Ctrl+P is now global for preview toggle, so remove this line
+            // (KeyModifiers::CONTROL, KeyCode::Char('p')) => KeyAction::Paste,
 
             // Utility
             (KeyModifiers::NONE, KeyCode::Char('?')) => KeyAction::ShowHelp,
@@ -236,9 +288,8 @@ impl EventHandler {
     /// Handle key events in insert mode
     fn handle_insert_mode_key(&self, key: KeyEvent) -> KeyAction {
         match (key.modifiers, key.code) {
-            // Exit insert mode
+            // Exit insert mode (Esc only, Ctrl+C is handled globally)
             (KeyModifiers::NONE, KeyCode::Esc) => KeyAction::EnterNormal,
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) => KeyAction::EnterNormal,
 
             // Send message
             (KeyModifiers::NONE, KeyCode::Enter) => KeyAction::Send,
@@ -266,9 +317,8 @@ impl EventHandler {
     /// Handle key events in command mode
     fn handle_command_mode_key(&self, key: KeyEvent) -> KeyAction {
         match (key.modifiers, key.code) {
-            // Exit command mode
+            // Exit command mode (Esc only, Ctrl+C is handled globally)
             (KeyModifiers::NONE, KeyCode::Esc) => KeyAction::EnterNormal,
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) => KeyAction::EnterNormal,
 
             // Execute command
             (KeyModifiers::NONE, KeyCode::Enter) => KeyAction::Send,
@@ -289,9 +339,8 @@ impl EventHandler {
     /// Handle key events in search mode
     fn handle_search_mode_key(&self, key: KeyEvent) -> KeyAction {
         match (key.modifiers, key.code) {
-            // Exit search mode
+            // Exit search mode (Esc only, Ctrl+C is handled globally)
             (KeyModifiers::NONE, KeyCode::Esc) => KeyAction::EnterNormal,
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) => KeyAction::EnterNormal,
 
             // Execute search
             (KeyModifiers::NONE, KeyCode::Enter) => KeyAction::Send,
@@ -325,18 +374,21 @@ impl EventHandler {
 
 /// Global flag to prevent multiple event listeners from being spawned
 static EVENT_LISTENER_SPAWNED: AtomicBool = AtomicBool::new(false);
+static EVENT_LISTENER_LOCK: Mutex<()> = Mutex::new(());
 
 /// Spawns a background task to capture terminal events
 /// This function ensures that only one event listener is running at a time
 pub fn spawn_event_listener(sender: mpsc::UnboundedSender<AppEvent>) {
+    // Use mutex to prevent race conditions in event listener spawning
+    let _lock = EVENT_LISTENER_LOCK.lock().unwrap();
+
     // Check if an event listener is already running
-    if EVENT_LISTENER_SPAWNED
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
+    if EVENT_LISTENER_SPAWNED.load(Ordering::SeqCst) {
         tracing::warn!("Event listener already spawned, skipping duplicate spawn");
         return;
     }
+
+    EVENT_LISTENER_SPAWNED.store(true, Ordering::SeqCst);
 
     tokio::task::spawn_blocking(move || {
         tracing::debug!("Starting terminal event listener");

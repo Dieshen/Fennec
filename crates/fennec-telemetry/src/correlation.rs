@@ -322,6 +322,7 @@ where
 #[derive(Debug)]
 struct SpanTiming {
     start_time: Instant,
+    #[allow(dead_code)]
     total_time: Duration,
     self_time: Duration,
     entered_at: Option<Instant>,

@@ -318,6 +318,7 @@ impl metrics::HistogramFn for SimpleHistogramImpl {
 #[derive(Debug)]
 struct SpanMetrics {
     start_time: Instant,
+    #[allow(dead_code)]
     total_time: Duration,
     self_time: Duration,
     entered_at: Option<Instant>,

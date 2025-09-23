@@ -18,8 +18,11 @@ use tracing_subscriber::{
 
 /// Main telemetry system that coordinates all telemetry components
 pub struct TelemetrySystem {
+    #[allow(dead_code)]
     config: Arc<RwLock<TelemetryConfig>>,
+    #[allow(dead_code)]
     retention_manager: Option<RetentionManager>,
+    #[allow(dead_code)]
     file_writer: Option<RotatingFileWriter>,
     _guard: Option<TelemetryGuard>,
 }
@@ -119,6 +122,7 @@ impl TelemetrySystem {
     }
 
     /// Build console logging layer
+    #[allow(dead_code)]
     fn build_console_layer(
         config: &TelemetryConfig,
     ) -> Result<Option<Box<dyn Layer<Registry> + Send + Sync>>> {
@@ -159,6 +163,7 @@ impl TelemetrySystem {
     }
 
     /// Build file logging layer
+    #[allow(dead_code)]
     async fn build_file_layer(
         config: &TelemetryConfig,
     ) -> Result<Option<Box<dyn Layer<Registry> + Send + Sync>>> {
@@ -214,6 +219,7 @@ impl TelemetrySystem {
     }
 
     /// Build sanitization layer for privacy protection
+    #[allow(dead_code)]
     fn build_sanitization_layer(config: &TelemetryConfig) -> Result<Option<SanitizationLayer>> {
         if !config.enabled || !config.privacy.sanitize_enabled {
             return Ok(None);
@@ -223,6 +229,7 @@ impl TelemetrySystem {
     }
 
     /// Build correlation layer for request tracing
+    #[allow(dead_code)]
     fn build_correlation_layer(config: &TelemetryConfig) -> Result<Option<CorrelationLayer>> {
         if !config.enabled || !config.metrics.correlation_tracking {
             return Ok(None);
@@ -232,6 +239,7 @@ impl TelemetrySystem {
     }
 
     /// Build metrics layer for performance monitoring
+    #[allow(dead_code)]
     fn build_metrics_layer(config: &TelemetryConfig) -> Result<Option<MetricsLayer>> {
         if !config.enabled || !config.metrics.enabled {
             return Ok(None);
