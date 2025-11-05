@@ -6,6 +6,7 @@ pub mod file_ops;
 pub mod plan;
 pub mod registry;
 pub mod run;
+// pub mod search; // TODO: Re-enable after fixing CommandExecutionResult usage
 pub mod summarize;
 pub mod summarize_enhanced;
 
@@ -27,6 +28,7 @@ pub use file_ops::{
 };
 pub use plan::{PlanArgs, PlanCommand};
 pub use run::{RunArgs, RunCommand};
+// pub use search::{SearchArgs, SearchCommand, SearchResult}; // TODO: Re-enable after fixing
 pub use summarize::{SummarizeArgs, SummarizeCommand};
 pub use summarize_enhanced::{
     EnhancedSummarizeArgs, EnhancedSummarizeCommand, OutputDestination, SummaryDepth, SummaryType,

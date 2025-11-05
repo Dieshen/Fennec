@@ -448,6 +448,7 @@ dependencies = [
  "fennec-security",
  "futures",
  "mockall",
+ "regex",
  "serde",
  "serde_json",
  "similar",
