@@ -11,3 +11,6 @@ pub use error::{ErrorDisplay, ErrorToast, Result as TuiResult, TuiError};
 
 // Re-export summary panel components
 pub use summary_panel::{SummaryGenerationStatus, SummaryPanel, SummaryPanelAction, SummaryTab};
+
+// Re-export file tree components
+pub use components::{FileTreeBrowser, FileTreeEntry};

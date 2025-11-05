@@ -693,6 +693,327 @@ impl PopupDialog {
     }
 }
 
+/// File tree entry representing a file or directory
+#[derive(Debug, Clone, PartialEq)]
+pub struct FileTreeEntry {
+    pub name: String,
+    pub path: std::path::PathBuf,
+    pub is_dir: bool,
+    pub is_expanded: bool,
+    pub depth: usize,
+    pub children: Vec<FileTreeEntry>,
+}
+
+impl FileTreeEntry {
+    /// Create a new file entry
+    pub fn new(name: String, path: std::path::PathBuf, is_dir: bool, depth: usize) -> Self {
+        Self {
+            name,
+            path,
+            is_dir,
+            is_expanded: false,
+            depth,
+            children: Vec::new(),
+        }
+    }
+
+    /// Toggle expansion state
+    pub fn toggle_expand(&mut self) {
+        if self.is_dir {
+            self.is_expanded = !self.is_expanded;
+        }
+    }
+
+    /// Get flattened list of visible entries
+    pub fn flatten_visible(&self) -> Vec<FileTreeEntry> {
+        let mut result = vec![self.clone()];
+        if self.is_expanded {
+            for child in &self.children {
+                result.extend(child.flatten_visible());
+            }
+        }
+        result
+    }
+}
+
+/// File tree browser component
+#[derive(Debug, Clone)]
+pub struct FileTreeBrowser {
+    root: Option<FileTreeEntry>,
+    visible_entries: Vec<FileTreeEntry>,
+    selected_index: usize,
+    scroll_state: ScrollbarState,
+    list_state: ListState,
+    filter: String,
+    show_hidden: bool,
+}
+
+impl Default for FileTreeBrowser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FileTreeBrowser {
+    /// Create a new file tree browser
+    pub fn new() -> Self {
+        Self {
+            root: None,
+            visible_entries: Vec::new(),
+            selected_index: 0,
+            scroll_state: ScrollbarState::default(),
+            list_state: ListState::default(),
+            filter: String::new(),
+            show_hidden: false,
+        }
+    }
+
+    /// Load directory tree from path
+    pub fn load_directory(&mut self, path: &std::path::Path) -> Result<(), std::io::Error> {
+        let root = self.load_entry(path, 0)?;
+        self.root = Some(root);
+        self.update_visible_entries();
+        Ok(())
+    }
+
+    /// Recursively load directory entries
+    fn load_entry(
+        &self,
+        path: &std::path::Path,
+        depth: usize,
+    ) -> Result<FileTreeEntry, std::io::Error> {
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(".")
+            .to_string();
+
+        let is_dir = path.is_dir();
+        let mut entry = FileTreeEntry::new(name, path.to_path_buf(), is_dir, depth);
+
+        if is_dir && depth < 3 {
+            // Limit initial depth to 3
+            if let Ok(entries) = std::fs::read_dir(path) {
+                let mut children: Vec<FileTreeEntry> = entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        self.show_hidden
+                            || !e
+                                .file_name()
+                                .to_str()
+                                .map(|s| s.starts_with('.'))
+                                .unwrap_or(false)
+                    })
+                    .filter_map(|e| self.load_entry(&e.path(), depth + 1).ok())
+                    .collect();
+
+                // Sort: directories first, then alphabetically
+                children.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                });
+
+                entry.children = children;
+            }
+        }
+
+        Ok(entry)
+    }
+
+    /// Update the list of visible entries
+    fn update_visible_entries(&mut self) {
+        if let Some(ref root) = self.root {
+            self.visible_entries = root.flatten_visible();
+
+            // Apply filter if set
+            if !self.filter.is_empty() {
+                let filter_lower = self.filter.to_lowercase();
+                self.visible_entries.retain(|entry| {
+                    entry.name.to_lowercase().contains(&filter_lower)
+                        || entry
+                            .path
+                            .to_string_lossy()
+                            .to_lowercase()
+                            .contains(&filter_lower)
+                });
+            }
+
+            self.scroll_state = self.scroll_state.content_length(self.visible_entries.len());
+
+            // Ensure selected index is valid
+            if self.selected_index >= self.visible_entries.len() && !self.visible_entries.is_empty()
+            {
+                self.selected_index = self.visible_entries.len() - 1;
+            }
+        }
+    }
+
+    /// Get the currently selected entry
+    pub fn selected_entry(&self) -> Option<&FileTreeEntry> {
+        self.visible_entries.get(self.selected_index)
+    }
+
+    /// Toggle expansion of selected directory
+    pub fn toggle_selected(&mut self) {
+        if let Some(entry) = self.visible_entries.get(self.selected_index) {
+            if entry.is_dir {
+                if let Some(ref mut root) = self.root {
+                    Self::toggle_entry_at_path(root, &entry.path);
+                    self.update_visible_entries();
+                }
+            }
+        }
+    }
+
+    /// Toggle expansion of entry at path (recursive helper)
+    fn toggle_entry_at_path(entry: &mut FileTreeEntry, target_path: &std::path::Path) -> bool {
+        if entry.path == target_path {
+            entry.toggle_expand();
+            return true;
+        }
+
+        for child in &mut entry.children {
+            if Self::toggle_entry_at_path(child, target_path) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Move selection up
+    pub fn select_previous(&mut self) {
+        if !self.visible_entries.is_empty() && self.selected_index > 0 {
+            self.selected_index -= 1;
+            self.list_state.select(Some(self.selected_index));
+            self.scroll_state.prev();
+        }
+    }
+
+    /// Move selection down
+    pub fn select_next(&mut self) {
+        if self.selected_index < self.visible_entries.len().saturating_sub(1) {
+            self.selected_index += 1;
+            self.list_state.select(Some(self.selected_index));
+            self.scroll_state.next();
+        }
+    }
+
+    /// Set filter string
+    pub fn set_filter(&mut self, filter: String) {
+        self.filter = filter;
+        self.update_visible_entries();
+    }
+
+    /// Clear filter
+    pub fn clear_filter(&mut self) {
+        self.filter.clear();
+        self.update_visible_entries();
+    }
+
+    /// Toggle showing hidden files
+    pub fn toggle_hidden(&mut self) {
+        self.show_hidden = !self.show_hidden;
+        // Would need to reload directory to apply this change
+    }
+
+    /// Refresh the directory tree
+    pub fn refresh(&mut self) -> Result<(), std::io::Error> {
+        if let Some(ref root) = self.root.clone() {
+            self.load_directory(&root.path)?;
+        }
+        Ok(())
+    }
+
+    /// Render the file tree browser
+    pub fn render(&mut self, area: Rect, buf: &mut Buffer, theme: &ThemeManager, focused: bool) {
+        let border_style = if focused {
+            theme.get_style(ComponentType::PreviewBorder)
+        } else {
+            theme.get_style(ComponentType::Border)
+        };
+
+        let title = if self.filter.is_empty() {
+            "Files".to_string()
+        } else {
+            format!("Files [Filter: {}]", self.filter)
+        };
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .title_style(theme.get_style(ComponentType::Title))
+            .border_style(border_style);
+
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        if self.visible_entries.is_empty() {
+            let empty_text = Paragraph::new("No files to display")
+                .style(theme.get_style(ComponentType::Muted))
+                .alignment(Alignment::Center);
+            empty_text.render(inner, buf);
+            return;
+        }
+
+        // Build list items
+        let items: Vec<ListItem> = self
+            .visible_entries
+            .iter()
+            .enumerate()
+            .map(|(idx, entry)| {
+                let indent = "  ".repeat(entry.depth);
+                let icon = if entry.is_dir {
+                    if entry.is_expanded {
+                        "▼ 📁 "
+                    } else {
+                        "▶ 📁 "
+                    }
+                } else {
+                    "  📄 "
+                };
+
+                let style = if idx == self.selected_index {
+                    theme
+                        .get_style(ComponentType::StatusActive)
+                        .add_modifier(Modifier::BOLD)
+                } else if entry.is_dir {
+                    theme
+                        .get_style(ComponentType::Text)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    theme.get_style(ComponentType::Text)
+                };
+
+                let content = format!("{}{}{}", indent, icon, entry.name);
+                ListItem::new(Line::from(Span::styled(content, style)))
+            })
+            .collect();
+
+        let list = List::new(items)
+            .style(theme.get_style(ComponentType::Text))
+            .highlight_style(
+                theme
+                    .get_style(ComponentType::StatusActive)
+                    .add_modifier(Modifier::BOLD | Modifier::REVERSED),
+            );
+
+        self.list_state.select(Some(self.selected_index));
+        StatefulWidget::render(list, inner, buf, &mut self.list_state);
+
+        // Render scrollbar
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"))
+            .track_style(theme.get_style(ComponentType::ScrollbarTrack))
+            .thumb_style(theme.get_style(ComponentType::ScrollbarThumb));
+
+        StatefulWidget::render(scrollbar, area, buf, &mut self.scroll_state);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
