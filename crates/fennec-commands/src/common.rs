@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use crate::registry::CommandRegistry;
 use crate::{
-    diff::DiffCommand, edit::EditCommand, plan::PlanCommand, run::RunCommand,
-    search::SearchCommand, summarize::SummarizeCommand,
-    summarize_enhanced::EnhancedSummarizeCommand,
+    create::CreateCommand, delete::DeleteCommand, diff::DiffCommand, edit::EditCommand,
+    plan::PlanCommand, rename::RenameCommand, run::RunCommand, search::SearchCommand,
+    summarize::SummarizeCommand, summarize_enhanced::EnhancedSummarizeCommand,
 };
 
 /// Initialize the command registry with all built-in commands
@@ -20,6 +20,15 @@ pub async fn initialize_builtin_commands() -> Result<CommandRegistry> {
     // Register all built-in commands
     let plan_command = PlanCommand::new().await?;
     registry.register_builtin(Arc::new(plan_command)).await?;
+    registry
+        .register_builtin(Arc::new(CreateCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(DeleteCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(RenameCommand::new()))
+        .await?;
     registry
         .register_builtin(Arc::new(EditCommand::new()))
         .await?;
@@ -182,11 +191,14 @@ mod tests {
         let registry = initialize_builtin_commands().await.unwrap();
         let commands = registry.list_commands().await;
 
-        // Should have all 7 built-in commands (including search and enhanced summarize)
-        assert_eq!(commands.len(), 7);
+        // Should have all 10 built-in commands (including file ops, search and enhanced summarize)
+        assert_eq!(commands.len(), 10);
 
         let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
         assert!(command_names.contains(&"plan".to_string()));
+        assert!(command_names.contains(&"create".to_string()));
+        assert!(command_names.contains(&"delete".to_string()));
+        assert!(command_names.contains(&"rename".to_string()));
         assert!(command_names.contains(&"edit".to_string()));
         assert!(command_names.contains(&"run".to_string()));
         assert!(command_names.contains(&"diff".to_string()));

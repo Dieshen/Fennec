@@ -1,10 +1,13 @@
 pub mod common;
+pub mod create;
+pub mod delete;
 pub mod diff;
 pub mod edit;
 pub mod error;
 pub mod file_ops;
 pub mod plan;
 pub mod registry;
+pub mod rename;
 pub mod run;
 pub mod search;
 pub mod summarize;
@@ -21,12 +24,15 @@ pub use registry::{
 };
 
 // Re-export individual commands
+pub use create::{CreateArgs, CreateCommand};
+pub use delete::{DeleteArgs, DeleteCommand};
 pub use diff::{DiffArgs, DiffCommand};
 pub use edit::{EditArgs, EditCommand};
 pub use file_ops::{
     EditStrategy, FileEditRequest, FileEditResult, FileOperations, FileOperationsConfig,
 };
 pub use plan::{PlanArgs, PlanCommand};
+pub use rename::{RenameArgs, RenameCommand};
 pub use run::{RunArgs, RunCommand};
 pub use search::{SearchArgs, SearchCommand, SearchResult};
 pub use summarize::{SummarizeArgs, SummarizeCommand};
