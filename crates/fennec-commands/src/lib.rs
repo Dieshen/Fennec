@@ -1,4 +1,5 @@
 pub mod action_log;
+pub mod commit_template;
 pub mod common;
 pub mod compiler_errors;
 pub mod create;
@@ -9,9 +10,11 @@ pub mod error;
 pub mod file_ops;
 pub mod find_symbol;
 pub mod fix_errors;
+pub mod git_integration;
 pub mod history;
 pub mod hunks;
 pub mod plan;
+pub mod pr_summary;
 pub mod redo;
 pub mod registry;
 pub mod rename;
@@ -20,6 +23,7 @@ pub mod search;
 pub mod symbols;
 pub mod summarize;
 pub mod summarize_enhanced;
+pub mod test_watch;
 pub mod undo;
 
 #[cfg(test)]
@@ -35,6 +39,7 @@ pub use registry::{
 };
 
 // Re-export individual commands
+pub use commit_template::{CommitTemplateArgs, CommitTemplateCommand};
 pub use compiler_errors::{CompilerMessage, FixConfidence, MessageLevel, SuggestedFix};
 pub use create::{CreateArgs, CreateCommand};
 pub use delete::{DeleteArgs, DeleteCommand};
@@ -45,8 +50,10 @@ pub use file_ops::{
 };
 pub use find_symbol::{FindSymbolArgs, FindSymbolCommand};
 pub use fix_errors::{FixErrorsArgs, FixErrorsCommand};
+pub use git_integration::{ChangeType, FileChange, GitCommit};
 pub use history::{HistoryArgs, HistoryCommand};
 pub use plan::{PlanArgs, PlanCommand};
+pub use pr_summary::{PrSummaryArgs, PrSummaryCommand};
 pub use redo::{RedoArgs, RedoCommand};
 pub use rename::{RenameArgs, RenameCommand};
 pub use run::{RunArgs, RunCommand};
@@ -56,6 +63,7 @@ pub use summarize_enhanced::{
     EnhancedSummarizeArgs, EnhancedSummarizeCommand, OutputDestination, SummaryDepth, SummaryType,
 };
 pub use symbols::{Symbol, SymbolIndex, SymbolType, Visibility as SymbolVisibility};
+pub use test_watch::{TestWatchArgs, TestWatchCommand};
 pub use undo::{UndoArgs, UndoCommand};
 
 /// Create a fully initialized command registry with all built-in commands

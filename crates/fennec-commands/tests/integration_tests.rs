@@ -32,7 +32,7 @@ async fn test_command_registry_initialization() -> Result<()> {
     let commands = registry.list_commands().await;
     let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
 
-    // Expect all 12 built-in commands
+    // Expect all 15 built-in commands (including Sprint 3 features)
     assert!(command_names.contains(&"plan".to_string()));
     assert!(command_names.contains(&"create".to_string()));
     assert!(command_names.contains(&"delete".to_string()));
@@ -43,11 +43,14 @@ async fn test_command_registry_initialization() -> Result<()> {
     assert!(command_names.contains(&"search".to_string()));
     assert!(command_names.contains(&"find-symbol".to_string()));
     assert!(command_names.contains(&"fix-errors".to_string()));
+    assert!(command_names.contains(&"pr-summary".to_string()));
+    assert!(command_names.contains(&"commit-template".to_string()));
+    assert!(command_names.contains(&"test-watch".to_string()));
     assert!(command_names.contains(&"summarize".to_string()));
     assert!(command_names.contains(&"summarize_enhanced".to_string()));
 
     // Ensure we didn't unintentionally register duplicates
-    assert_eq!(command_names.len(), 12);
+    assert_eq!(command_names.len(), 15);
 
     Ok(())
 }
@@ -348,11 +351,14 @@ async fn test_command_filtering_by_capabilities() -> Result<()> {
         .list_commands_by_capability(&fennec_core::command::Capability::ExecuteShell)
         .await;
 
-    // run and fix-errors commands should be included
+    // run, fix-errors, pr-summary, commit-template, and test-watch commands should be included
     let shell_command_names: Vec<String> = shell_commands.iter().map(|c| c.name.clone()).collect();
-    assert_eq!(shell_commands.len(), 2);
+    assert_eq!(shell_commands.len(), 5);
     assert!(shell_command_names.contains(&"run".to_string()));
     assert!(shell_command_names.contains(&"fix-errors".to_string()));
+    assert!(shell_command_names.contains(&"pr-summary".to_string()));
+    assert!(shell_command_names.contains(&"commit-template".to_string()));
+    assert!(shell_command_names.contains(&"test-watch".to_string()));
 
     Ok(())
 }
