@@ -470,3 +470,297 @@ impl RiskLevelExt for RiskLevel {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_approval_status_values() {
+        assert!(matches!(ApprovalStatus::Pending, ApprovalStatus::Pending));
+        assert!(matches!(ApprovalStatus::Approved, ApprovalStatus::Approved));
+        assert!(matches!(ApprovalStatus::Denied, ApprovalStatus::Denied));
+        assert!(matches!(ApprovalStatus::TimedOut, ApprovalStatus::TimedOut));
+    }
+
+    #[test]
+    fn test_approval_status_eq() {
+        assert_eq!(ApprovalStatus::Pending, ApprovalStatus::Pending);
+        assert_eq!(ApprovalStatus::Approved, ApprovalStatus::Approved);
+        assert_ne!(ApprovalStatus::Approved, ApprovalStatus::Denied);
+    }
+
+    #[test]
+    fn test_risk_level_display() {
+        assert_eq!(RiskLevel::Low.to_string(), "LOW");
+        assert_eq!(RiskLevel::Medium.to_string(), "MEDIUM");
+        assert_eq!(RiskLevel::High.to_string(), "HIGH");
+        assert_eq!(RiskLevel::Critical.to_string(), "CRITICAL");
+    }
+
+    #[test]
+    fn test_risk_level_eq() {
+        assert_eq!(RiskLevel::Low, RiskLevel::Low);
+        assert_eq!(RiskLevel::High, RiskLevel::High);
+        assert_ne!(RiskLevel::Low, RiskLevel::High);
+    }
+
+    #[test]
+    fn test_risk_level_max() {
+        assert_eq!(RiskLevel::Low.max(RiskLevel::Medium), RiskLevel::Medium);
+        assert_eq!(RiskLevel::High.max(RiskLevel::Low), RiskLevel::High);
+        assert_eq!(RiskLevel::Critical.max(RiskLevel::High), RiskLevel::Critical);
+        assert_eq!(RiskLevel::Medium.max(RiskLevel::Medium), RiskLevel::Medium);
+    }
+
+    #[test]
+    fn test_approval_manager_default() {
+        let manager = ApprovalManager::default();
+        assert!(!manager.auto_approve_low_risk);
+        assert!(manager.interactive_mode);
+    }
+
+    #[test]
+    fn test_approval_manager_new() {
+        let manager = ApprovalManager::new(true, false);
+        assert!(manager.auto_approve_low_risk);
+        assert!(!manager.interactive_mode);
+    }
+
+    #[test]
+    fn test_auto_approve_low_risk() {
+        let manager = ApprovalManager::new(true, true);
+        let request = ApprovalRequest {
+            operation: "Test".to_string(),
+            description: "Test operation".to_string(),
+            risk_level: RiskLevel::Low,
+            details: vec![],
+        };
+
+        let status = manager.request_approval(&request).unwrap();
+        assert_eq!(status, ApprovalStatus::Approved);
+    }
+
+    #[test]
+    fn test_non_interactive_denies() {
+        let manager = ApprovalManager::new(false, false);
+        let request = ApprovalRequest {
+            operation: "Test".to_string(),
+            description: "Test operation".to_string(),
+            risk_level: RiskLevel::Medium,
+            details: vec![],
+        };
+
+        let status = manager.request_approval(&request).unwrap();
+        assert_eq!(status, ApprovalStatus::Denied);
+    }
+
+    #[test]
+    fn test_risk_level_emoji() {
+        let manager = ApprovalManager::default();
+        assert_eq!(manager.risk_level_emoji(&RiskLevel::Low), "🟢");
+        assert_eq!(manager.risk_level_emoji(&RiskLevel::Medium), "🟡");
+        assert_eq!(manager.risk_level_emoji(&RiskLevel::High), "🟠");
+        assert_eq!(manager.risk_level_emoji(&RiskLevel::Critical), "🔴");
+    }
+
+    #[test]
+    fn test_risk_level_description() {
+        let manager = ApprovalManager::default();
+        assert_eq!(
+            manager.risk_level_description(&RiskLevel::Low),
+            "Minimal security impact"
+        );
+        assert_eq!(
+            manager.risk_level_description(&RiskLevel::Medium),
+            "Moderate security considerations"
+        );
+        assert_eq!(
+            manager.risk_level_description(&RiskLevel::High),
+            "Significant security implications"
+        );
+        assert_eq!(
+            manager.risk_level_description(&RiskLevel::Critical),
+            "Severe security risks"
+        );
+    }
+
+    #[test]
+    fn test_get_risk_warning() {
+        let manager = ApprovalManager::default();
+        assert!(manager.get_risk_warning(&RiskLevel::Low).contains("minimal"));
+        assert!(manager.get_risk_warning(&RiskLevel::Medium).contains("security"));
+        assert!(manager.get_risk_warning(&RiskLevel::High).contains("WARNING"));
+        assert!(manager.get_risk_warning(&RiskLevel::Critical).contains("DANGER"));
+    }
+
+    #[test]
+    fn test_get_security_implications() {
+        let manager = ApprovalManager::default();
+
+        let low_impl = manager.get_security_implications(&RiskLevel::Low);
+        assert!(!low_impl.is_empty());
+        assert!(low_impl.iter().any(|s| s.contains("Limited")));
+
+        let critical_impl = manager.get_security_implications(&RiskLevel::Critical);
+        assert!(!critical_impl.is_empty());
+        assert!(critical_impl.iter().any(|s| s.contains("Full system access")));
+    }
+
+    #[test]
+    fn test_classify_command_risk_critical() {
+        assert_eq!(classify_command_risk("rm -rf /"), RiskLevel::Critical);
+        assert_eq!(classify_command_risk("sudo dd if=/dev/zero of=/dev/sda"), RiskLevel::Critical);
+        assert_eq!(classify_command_risk("chmod 777 /etc/passwd"), RiskLevel::Critical);
+        assert_eq!(classify_command_risk("shutdown -h now"), RiskLevel::Critical);
+    }
+
+    #[test]
+    fn test_classify_command_risk_high() {
+        assert_eq!(classify_command_risk("sudo apt update"), RiskLevel::High);
+        assert_eq!(classify_command_risk("chmod +x script.sh"), RiskLevel::High);
+        assert_eq!(classify_command_risk("systemctl restart nginx"), RiskLevel::High);
+        assert_eq!(classify_command_risk("ssh user@server"), RiskLevel::High);
+    }
+
+    #[test]
+    fn test_classify_command_risk_medium() {
+        assert_eq!(classify_command_risk("curl https://example.com"), RiskLevel::Medium);
+        assert_eq!(classify_command_risk("npm install package"), RiskLevel::Medium);
+        assert_eq!(classify_command_risk("git clone repo"), RiskLevel::Medium);
+        assert_eq!(classify_command_risk("cargo build --release"), RiskLevel::Medium);
+    }
+
+    #[test]
+    fn test_classify_command_risk_low() {
+        assert_eq!(classify_command_risk("ls -la"), RiskLevel::Low);
+        assert_eq!(classify_command_risk("echo hello"), RiskLevel::Low);
+        assert_eq!(classify_command_risk("pwd"), RiskLevel::Low);
+        assert_eq!(classify_command_risk("cd /tmp"), RiskLevel::Low);
+    }
+
+    #[test]
+    fn test_create_shell_command_approval() {
+        let request = create_shell_command_approval("rm -rf /tmp/test");
+        assert_eq!(request.operation, "Shell Command Execution");
+        assert!(request.description.contains("rm -rf"));
+        assert_eq!(request.risk_level, RiskLevel::Critical);
+        assert!(!request.details.is_empty());
+    }
+
+    #[test]
+    fn test_create_network_access_approval_https() {
+        let request = create_network_access_approval("https://example.com");
+        assert_eq!(request.operation, "Network Access");
+        assert_eq!(request.risk_level, RiskLevel::Medium);
+        assert!(request.description.contains("https://example.com"));
+    }
+
+    #[test]
+    fn test_create_network_access_approval_http() {
+        let request = create_network_access_approval("http://example.com");
+        assert_eq!(request.operation, "Network Access");
+        assert_eq!(request.risk_level, RiskLevel::High);
+    }
+
+    #[test]
+    fn test_approval_request_clone() {
+        let request = ApprovalRequest {
+            operation: "Test".to_string(),
+            description: "Test desc".to_string(),
+            risk_level: RiskLevel::Low,
+            details: vec!["detail1".to_string()],
+        };
+
+        let cloned = request.clone();
+        assert_eq!(cloned.operation, request.operation);
+        assert_eq!(cloned.risk_level, request.risk_level);
+    }
+
+    #[test]
+    fn test_approval_request_serialization() {
+        let request = ApprovalRequest {
+            operation: "Test".to_string(),
+            description: "Test desc".to_string(),
+            risk_level: RiskLevel::Medium,
+            details: vec!["detail1".to_string()],
+        };
+
+        let serialized = serde_json::to_string(&request).unwrap();
+        let deserialized: ApprovalRequest = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.operation, request.operation);
+        assert_eq!(deserialized.risk_level, request.risk_level);
+    }
+
+    #[test]
+    fn test_approval_status_serialization() {
+        let status = ApprovalStatus::Approved;
+        let serialized = serde_json::to_string(&status).unwrap();
+        let deserialized: ApprovalStatus = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, ApprovalStatus::Approved);
+    }
+
+    #[test]
+    fn test_risk_level_serialization() {
+        let risk = RiskLevel::High;
+        let serialized = serde_json::to_string(&risk).unwrap();
+        let deserialized: RiskLevel = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, RiskLevel::High);
+    }
+
+    #[test]
+    fn test_check_command_approval_not_required() {
+        use fennec_core::command::CommandPreview;
+        use uuid::Uuid;
+
+        let preview = CommandPreview {
+            command_id: Uuid::new_v4(),
+            description: "Test".to_string(),
+            actions: vec![],
+            requires_approval: false,
+        };
+
+        let sandbox = SandboxPolicy::new(crate::SandboxLevel::ReadOnly, PathBuf::from("/tmp"), false);
+        let manager = ApprovalManager::new(false, false);
+
+        let status = check_command_approval(&preview, &sandbox, &manager).unwrap();
+        assert_eq!(status, ApprovalStatus::Approved);
+    }
+
+    #[test]
+    fn test_classify_command_risk_case_insensitive() {
+        assert_eq!(classify_command_risk("RM -RF /"), RiskLevel::Critical);
+        assert_eq!(classify_command_risk("SUDO apt update"), RiskLevel::High);
+        assert_eq!(classify_command_risk("CURL http://example.com"), RiskLevel::Medium);
+    }
+
+    #[test]
+    fn test_risk_level_debug() {
+        let risk = RiskLevel::Critical;
+        let debug = format!("{:?}", risk);
+        assert!(debug.contains("Critical"));
+    }
+
+    #[test]
+    fn test_approval_status_debug() {
+        let status = ApprovalStatus::Approved;
+        let debug = format!("{:?}", status);
+        assert!(debug.contains("Approved"));
+    }
+
+    #[test]
+    fn test_approval_status_clone() {
+        let status = ApprovalStatus::Pending;
+        let cloned = status.clone();
+        assert_eq!(cloned, ApprovalStatus::Pending);
+    }
+
+    #[test]
+    fn test_risk_level_clone() {
+        let risk = RiskLevel::Medium;
+        let cloned = risk.clone();
+        assert_eq!(cloned, RiskLevel::Medium);
+    }
+}
