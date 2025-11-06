@@ -1,5 +1,6 @@
 pub mod action_log;
 pub mod common;
+pub mod compiler_errors;
 pub mod create;
 pub mod delete;
 pub mod diff;
@@ -7,6 +8,7 @@ pub mod edit;
 pub mod error;
 pub mod file_ops;
 pub mod find_symbol;
+pub mod fix_errors;
 pub mod history;
 pub mod hunks;
 pub mod plan;
@@ -33,6 +35,7 @@ pub use registry::{
 };
 
 // Re-export individual commands
+pub use compiler_errors::{CompilerMessage, FixConfidence, MessageLevel, SuggestedFix};
 pub use create::{CreateArgs, CreateCommand};
 pub use delete::{DeleteArgs, DeleteCommand};
 pub use diff::{DiffArgs, DiffCommand};
@@ -41,6 +44,7 @@ pub use file_ops::{
     EditStrategy, FileEditRequest, FileEditResult, FileOperations, FileOperationsConfig,
 };
 pub use find_symbol::{FindSymbolArgs, FindSymbolCommand};
+pub use fix_errors::{FixErrorsArgs, FixErrorsCommand};
 pub use history::{HistoryArgs, HistoryCommand};
 pub use plan::{PlanArgs, PlanCommand};
 pub use redo::{RedoArgs, RedoCommand};

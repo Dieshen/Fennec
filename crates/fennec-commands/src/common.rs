@@ -9,8 +9,9 @@ use std::sync::Arc;
 use crate::registry::CommandRegistry;
 use crate::{
     create::CreateCommand, delete::DeleteCommand, diff::DiffCommand, edit::EditCommand,
-    find_symbol::FindSymbolCommand, plan::PlanCommand, rename::RenameCommand, run::RunCommand,
-    search::SearchCommand, summarize::SummarizeCommand, summarize_enhanced::EnhancedSummarizeCommand,
+    find_symbol::FindSymbolCommand, fix_errors::FixErrorsCommand, plan::PlanCommand,
+    rename::RenameCommand, run::RunCommand, search::SearchCommand, summarize::SummarizeCommand,
+    summarize_enhanced::EnhancedSummarizeCommand,
 };
 
 /// Initialize the command registry with all built-in commands
@@ -43,6 +44,9 @@ pub async fn initialize_builtin_commands() -> Result<CommandRegistry> {
         .await?;
     registry
         .register_builtin(Arc::new(FindSymbolCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(FixErrorsCommand::new()))
         .await?;
     registry
         .register_builtin(Arc::new(SummarizeCommand::new()))
@@ -194,8 +198,8 @@ mod tests {
         let registry = initialize_builtin_commands().await.unwrap();
         let commands = registry.list_commands().await;
 
-        // Should have all 11 built-in commands (including file ops, search, find-symbol and enhanced summarize)
-        assert_eq!(commands.len(), 11);
+        // Should have all 12 built-in commands (including file ops, search, find-symbol, fix-errors, and enhanced summarize)
+        assert_eq!(commands.len(), 12);
 
         let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
         assert!(command_names.contains(&"plan".to_string()));
@@ -207,6 +211,7 @@ mod tests {
         assert!(command_names.contains(&"diff".to_string()));
         assert!(command_names.contains(&"search".to_string()));
         assert!(command_names.contains(&"find-symbol".to_string()));
+        assert!(command_names.contains(&"fix-errors".to_string()));
         assert!(command_names.contains(&"summarize".to_string()));
         assert!(command_names.contains(&"summarize_enhanced".to_string()));
     }

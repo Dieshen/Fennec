@@ -32,7 +32,7 @@ async fn test_command_registry_initialization() -> Result<()> {
     let commands = registry.list_commands().await;
     let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
 
-    // Expect all 11 built-in commands
+    // Expect all 12 built-in commands
     assert!(command_names.contains(&"plan".to_string()));
     assert!(command_names.contains(&"create".to_string()));
     assert!(command_names.contains(&"delete".to_string()));
@@ -42,11 +42,12 @@ async fn test_command_registry_initialization() -> Result<()> {
     assert!(command_names.contains(&"diff".to_string()));
     assert!(command_names.contains(&"search".to_string()));
     assert!(command_names.contains(&"find-symbol".to_string()));
+    assert!(command_names.contains(&"fix-errors".to_string()));
     assert!(command_names.contains(&"summarize".to_string()));
     assert!(command_names.contains(&"summarize_enhanced".to_string()));
 
     // Ensure we didn't unintentionally register duplicates
-    assert_eq!(command_names.len(), 11);
+    assert_eq!(command_names.len(), 12);
 
     Ok(())
 }
@@ -347,9 +348,11 @@ async fn test_command_filtering_by_capabilities() -> Result<()> {
         .list_commands_by_capability(&fennec_core::command::Capability::ExecuteShell)
         .await;
 
-    // Only run command should be included
-    assert_eq!(shell_commands.len(), 1);
-    assert_eq!(shell_commands[0].name, "run");
+    // run and fix-errors commands should be included
+    let shell_command_names: Vec<String> = shell_commands.iter().map(|c| c.name.clone()).collect();
+    assert_eq!(shell_commands.len(), 2);
+    assert!(shell_command_names.contains(&"run".to_string()));
+    assert!(shell_command_names.contains(&"fix-errors".to_string()));
 
     Ok(())
 }
