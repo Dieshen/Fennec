@@ -1,4 +1,5 @@
 use anyhow::Result;
+use crate::action_log::Action;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
 use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
 use fennec_security::SandboxLevel;
@@ -110,6 +111,17 @@ impl RenameCommand {
                 format!("Failed to rename: {}", e)
             )))
         })?;
+
+        // Record action to log
+        if let Some(action_log) = &context.action_log {
+            let action = Action::file_moved(
+                "rename".to_string(),
+                from_path.clone(),
+                to_path.clone(),
+                format!("Renamed: {} -> {}", from_path.display(), to_path.display()),
+            );
+            action_log.record(action).await;
+        }
 
         Ok(format!("Renamed: {} -> {}", from_path.display(), to_path.display()))
     }

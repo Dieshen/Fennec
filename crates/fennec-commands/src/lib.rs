@@ -7,6 +7,7 @@ pub mod edit;
 pub mod error;
 pub mod file_ops;
 pub mod history;
+pub mod hunks;
 pub mod plan;
 pub mod redo;
 pub mod registry;
@@ -24,6 +25,7 @@ mod tests;
 pub use action_log::{Action, ActionLog, ActionState};
 pub use common::{format_file_size, initialize_builtin_commands, is_text_file, truncate_text};
 pub use error::{CommandError, Result as CommandResult};
+pub use hunks::{apply_hunks, split_diff_into_hunks, Hunk, HunkStatus};
 pub use registry::{
     CommandContext, CommandDescriptor, CommandExecutionResult, CommandExecutor, CommandRegistry,
 };

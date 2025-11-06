@@ -1,4 +1,5 @@
 use anyhow::Result;
+use crate::action_log::Action;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
 use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
 use fennec_security::SandboxLevel;
@@ -130,7 +131,7 @@ impl DeleteCommand {
         }
 
         // Perform the deletion
-        if is_dir {
+        let result = if is_dir {
             if args.recursive {
                 fs::remove_dir_all(&target_path).await.map_err(|e| {
                     FennecError::Command(Box::new(std::io::Error::new(
@@ -146,16 +147,50 @@ impl DeleteCommand {
                     )))
                 })?;
             }
-            Ok(format!("Deleted directory: {}", target_path.display()))
+
+            // Record action to log (simplified - not storing directory contents for now)
+            if let Some(action_log) = &context.action_log {
+                let action = Action::file_deleted(
+                    "delete".to_string(),
+                    target_path.clone(),
+                    Vec::new(), // Empty content for directories
+                    format!("Deleted directory: {}", target_path.display()),
+                );
+                action_log.record(action).await;
+            }
+
+            format!("Deleted directory: {}", target_path.display())
         } else {
+            // Read file content before deleting for undo capability
+            let content = fs::read(&target_path).await.map_err(|e| {
+                FennecError::Command(Box::new(std::io::Error::new(
+                    e.kind(),
+                    format!("Failed to read file before deletion: {}", e)
+                )))
+            })?;
+
             fs::remove_file(&target_path).await.map_err(|e| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     e.kind(),
                     format!("Failed to delete file: {}", e)
                 )))
             })?;
-            Ok(format!("Deleted file: {}", target_path.display()))
-        }
+
+            // Record action to log with content for restore capability
+            if let Some(action_log) = &context.action_log {
+                let action = Action::file_deleted(
+                    "delete".to_string(),
+                    target_path.clone(),
+                    content,
+                    format!("Deleted file: {}", target_path.display()),
+                );
+                action_log.record(action).await;
+            }
+
+            format!("Deleted file: {}", target_path.display())
+        };
+
+        Ok(result)
     }
 }
 

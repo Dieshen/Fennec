@@ -1,4 +1,5 @@
 use anyhow::Result;
+use crate::action_log::Action;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
 use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
 use fennec_security::SandboxLevel;
@@ -105,14 +106,25 @@ impl CreateCommand {
         }
 
         // Create the file or directory
-        if args.is_directory {
+        let result = if args.is_directory {
             fs::create_dir(&target_path).await.map_err(|e| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     e.kind(),
                     format!("Failed to create directory: {}", e)
                 )))
             })?;
-            Ok(format!("Created directory: {}", target_path.display()))
+
+            // Record action to log
+            if let Some(action_log) = &context.action_log {
+                let action = Action::file_created(
+                    "create".to_string(),
+                    target_path.clone(),
+                    format!("Created directory: {}", target_path.display()),
+                );
+                action_log.record(action).await;
+            }
+
+            format!("Created directory: {}", target_path.display())
         } else {
             let content = args.content.as_deref().unwrap_or("");
             fs::write(&target_path, content).await.map_err(|e| {
@@ -121,8 +133,21 @@ impl CreateCommand {
                     format!("Failed to create file: {}", e)
                 )))
             })?;
-            Ok(format!("Created file: {} ({} bytes)", target_path.display(), content.len()))
-        }
+
+            // Record action to log
+            if let Some(action_log) = &context.action_log {
+                let action = Action::file_created(
+                    "create".to_string(),
+                    target_path.clone(),
+                    format!("Created file: {} ({} bytes)", target_path.display(), content.len()),
+                );
+                action_log.record(action).await;
+            }
+
+            format!("Created file: {} ({} bytes)", target_path.display(), content.len())
+        };
+
+        Ok(result)
     }
 }
 
