@@ -459,3 +459,445 @@ impl fmt::Display for RecoveryAction {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test ErrorCategory enum
+    #[test]
+    fn test_error_category_display() {
+        assert_eq!(ErrorCategory::User.to_string(), "User Error");
+        assert_eq!(ErrorCategory::System.to_string(), "System Error");
+        assert_eq!(ErrorCategory::Network.to_string(), "Network Error");
+        assert_eq!(ErrorCategory::Security.to_string(), "Security Error");
+        assert_eq!(ErrorCategory::Internal.to_string(), "Internal Error");
+    }
+
+    #[test]
+    fn test_error_category_equality() {
+        assert_eq!(ErrorCategory::User, ErrorCategory::User);
+        assert_ne!(ErrorCategory::User, ErrorCategory::System);
+    }
+
+    // Test ErrorSeverity enum
+    #[test]
+    fn test_error_severity_display() {
+        assert_eq!(ErrorSeverity::Info.to_string(), "Info");
+        assert_eq!(ErrorSeverity::Warning.to_string(), "Warning");
+        assert_eq!(ErrorSeverity::Error.to_string(), "Error");
+        assert_eq!(ErrorSeverity::Critical.to_string(), "Critical");
+    }
+
+    #[test]
+    fn test_error_severity_ordering() {
+        assert!(ErrorSeverity::Info < ErrorSeverity::Warning);
+        assert!(ErrorSeverity::Warning < ErrorSeverity::Error);
+        assert!(ErrorSeverity::Error < ErrorSeverity::Critical);
+    }
+
+    // Test RecoveryAction enum
+    #[test]
+    fn test_recovery_action_display() {
+        assert_eq!(RecoveryAction::Retry.to_string(), "Try again");
+        assert_eq!(
+            RecoveryAction::RetryWithChanges("change X".to_string()).to_string(),
+            "Try again: change X"
+        );
+        assert_eq!(
+            RecoveryAction::CheckConfiguration("check Y".to_string()).to_string(),
+            "Check configuration: check Y"
+        );
+        assert_eq!(
+            RecoveryAction::CheckPermissions("perm Z".to_string()).to_string(),
+            "Check permissions: perm Z"
+        );
+        assert_eq!(
+            RecoveryAction::ContactSupport("help".to_string()).to_string(),
+            "Contact support: help"
+        );
+        assert_eq!(
+            RecoveryAction::ManualAction("do this".to_string()).to_string(),
+            "Manual action required: do this"
+        );
+        assert_eq!(RecoveryAction::None.to_string(), "No recovery available");
+    }
+
+    // Test FennecError variants
+    #[test]
+    fn test_config_not_found_error() {
+        let err = FennecError::ConfigNotFound {
+            path: "/path/to/config.toml".to_string(),
+        };
+        assert!(err.to_string().contains("Configuration file not found"));
+        assert!(err.to_string().contains("/path/to/config.toml"));
+        assert_eq!(err.category(), ErrorCategory::User);
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+        assert!(!err.recovery_actions().is_empty());
+    }
+
+    #[test]
+    fn test_config_invalid_error() {
+        let err = FennecError::ConfigInvalid {
+            issue: "missing field".to_string(),
+            suggestion: "add required field".to_string(),
+        };
+        assert!(err.to_string().contains("Invalid configuration"));
+        assert_eq!(err.category(), ErrorCategory::User);
+        assert!(err.user_message().contains("Configuration is invalid"));
+    }
+
+    #[test]
+    fn test_config_load_failed_error() {
+        let err = FennecError::ConfigLoadFailed {
+            path: "/config.toml".to_string(),
+            source: Box::new(std::io::Error::new(std::io::ErrorKind::Other, "test")),
+        };
+        assert!(err.to_string().contains("Failed to load configuration"));
+        assert!(err.debug_context().unwrap().contains("Config path"));
+    }
+
+    #[test]
+    fn test_file_read_error() {
+        let err = FennecError::FileRead {
+            path: "/file.txt".to_string(),
+            source: std::io::Error::new(std::io::ErrorKind::NotFound, "not found"),
+        };
+        assert!(err.to_string().contains("Failed to read file"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn test_file_write_error() {
+        let err = FennecError::FileWrite {
+            path: "/file.txt".to_string(),
+            source: std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied"),
+        };
+        assert!(err.to_string().contains("Failed to write file"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn test_file_not_found_error() {
+        let err = FennecError::FileNotFound {
+            path: "/missing.txt".to_string(),
+        };
+        assert!(err.to_string().contains("File not found"));
+        assert_eq!(err.category(), ErrorCategory::User);
+        assert!(err.user_message().contains("could not be found"));
+    }
+
+    #[test]
+    fn test_permission_denied_error() {
+        let err = FennecError::PermissionDenied {
+            path: "/secret.txt".to_string(),
+        };
+        assert!(err.to_string().contains("Permission denied"));
+        assert_eq!(err.category(), ErrorCategory::Security);
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+    }
+
+    #[test]
+    fn test_session_not_found_error() {
+        let err = FennecError::SessionNotFound {
+            session_id: "session123".to_string(),
+        };
+        assert!(err.to_string().contains("Session"));
+        assert!(err.to_string().contains("not found"));
+        assert_eq!(err.category(), ErrorCategory::User);
+    }
+
+    #[test]
+    fn test_session_limit_exceeded_error() {
+        let err = FennecError::SessionLimitExceeded {
+            current: 10,
+            max: 5,
+        };
+        assert!(err.to_string().contains("Session limit exceeded"));
+        assert!(err.to_string().contains("10"));
+        assert!(err.to_string().contains("5"));
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+    }
+
+    #[test]
+    fn test_session_already_active_error() {
+        let err = FennecError::SessionAlreadyActive {
+            session_id: "session123".to_string(),
+        };
+        assert!(err.to_string().contains("already active"));
+        assert_eq!(err.category(), ErrorCategory::User);
+    }
+
+    #[test]
+    fn test_workspace_not_found_error() {
+        let err = FennecError::WorkspaceNotFound {
+            path: "/workspace".to_string(),
+        };
+        assert!(err.to_string().contains("Workspace not found"));
+        assert_eq!(err.category(), ErrorCategory::User);
+        assert!(err.user_message().contains("Workspace directory not found"));
+    }
+
+    #[test]
+    fn test_invalid_workspace_error() {
+        let err = FennecError::InvalidWorkspace {
+            reason: "not a git repository".to_string(),
+        };
+        assert!(err.to_string().contains("Invalid workspace"));
+        assert_eq!(err.category(), ErrorCategory::User);
+    }
+
+    #[test]
+    fn test_service_unavailable_error() {
+        let err = FennecError::ServiceUnavailable {
+            service: "API".to_string(),
+            reason: "connection timeout".to_string(),
+        };
+        assert!(err.to_string().contains("Service"));
+        assert!(err.to_string().contains("not available"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+    }
+
+    #[test]
+    fn test_service_init_failed_error() {
+        let err = FennecError::ServiceInitFailed {
+            service: "Database".to_string(),
+            reason: "connection refused".to_string(),
+        };
+        assert!(err.to_string().contains("initialization failed"));
+        assert!(err.debug_context().unwrap().contains("Service:"));
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+    }
+
+    #[test]
+    fn test_io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
+        let fennec_err: FennecError = io_err.into();
+        assert!(matches!(fennec_err, FennecError::Io(_)));
+        assert_eq!(fennec_err.category(), ErrorCategory::System);
+    }
+
+    #[test]
+    fn test_serialization_error_conversion() {
+        let json_str = "{ invalid json";
+        let json_err = serde_json::from_str::<serde_json::Value>(json_str).unwrap_err();
+        let fennec_err: FennecError = json_err.into();
+        assert!(matches!(fennec_err, FennecError::Serialization(_)));
+        assert_eq!(fennec_err.category(), ErrorCategory::System);
+    }
+
+    #[test]
+    fn test_toml_parsing_error_conversion() {
+        let toml_str = "invalid = toml =";
+        let toml_err = toml::from_str::<toml::Value>(toml_str).unwrap_err();
+        let fennec_err: FennecError = toml_err.into();
+        assert!(matches!(fennec_err, FennecError::TomlParsing(_)));
+    }
+
+    #[test]
+    fn test_provider_error() {
+        let err = FennecError::Provider(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "provider error",
+        )));
+        assert!(err.to_string().contains("Provider error"));
+        assert_eq!(err.category(), ErrorCategory::Network);
+    }
+
+    #[test]
+    fn test_command_error() {
+        let err = FennecError::Command(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "command error",
+        )));
+        assert!(err.to_string().contains("Command error"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_security_error() {
+        let err = FennecError::Security(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "security error",
+        )));
+        assert!(err.to_string().contains("Security error"));
+        assert_eq!(err.category(), ErrorCategory::Security);
+    }
+
+    #[test]
+    fn test_memory_error() {
+        let err = FennecError::Memory(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "memory error",
+        )));
+        assert!(err.to_string().contains("Memory error"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_tui_error() {
+        let err = FennecError::Tui(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "tui error",
+        )));
+        assert!(err.to_string().contains("TUI error"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_orchestration_error() {
+        let err = FennecError::Orchestration(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "orchestration error",
+        )));
+        assert!(err.to_string().contains("Orchestration error"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_unknown_error() {
+        let err = FennecError::Unknown {
+            message: "something unexpected".to_string(),
+            source: Some(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "source error",
+            ))),
+        };
+        assert!(err.to_string().contains("Unexpected error"));
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+        assert!(err.debug_context().is_some());
+    }
+
+    #[test]
+    fn test_unknown_error_without_source() {
+        let err = FennecError::Unknown {
+            message: "no source".to_string(),
+            source: None,
+        };
+        assert!(err.debug_context().is_none());
+    }
+
+    // Test ErrorInfo trait
+    #[test]
+    fn test_is_retryable() {
+        let retryable = FennecError::FileRead {
+            path: "/test.txt".to_string(),
+            source: std::io::Error::new(std::io::ErrorKind::NotFound, "test"),
+        };
+        assert!(retryable.is_retryable());
+
+        let not_retryable = FennecError::SessionAlreadyActive {
+            session_id: "test".to_string(),
+        };
+        assert!(not_retryable.is_retryable()); // Has Retry action
+    }
+
+    #[test]
+    fn test_recovery_actions_content() {
+        let err = FennecError::ConfigNotFound {
+            path: "/config.toml".to_string(),
+        };
+        let actions = err.recovery_actions();
+        assert!(!actions.is_empty());
+        assert!(actions.len() >= 2);
+    }
+
+    #[test]
+    fn test_user_message_content() {
+        let errors = vec![
+            FennecError::ConfigNotFound {
+                path: "/config".to_string(),
+            },
+            FennecError::FileNotFound {
+                path: "/file".to_string(),
+            },
+            FennecError::PermissionDenied {
+                path: "/secret".to_string(),
+            },
+            FennecError::SessionLimitExceeded {
+                current: 5,
+                max: 3,
+            },
+        ];
+
+        for err in errors {
+            let msg = err.user_message();
+            assert!(!msg.is_empty());
+            assert!(msg.len() > 20); // Should be descriptive
+        }
+    }
+
+    // Test helper functions
+    #[test]
+    fn test_user_friendly_error_with_fennec_error() {
+        let err = FennecError::FileNotFound {
+            path: "/test.txt".to_string(),
+        };
+        let msg = user_friendly_error(&err);
+        assert!(msg.contains("could not be found"));
+    }
+
+    #[test]
+    fn test_user_friendly_error_with_other_error() {
+        let err = std::io::Error::new(std::io::ErrorKind::Other, "test");
+        let msg = user_friendly_error(&err);
+        assert_eq!(msg, "An unexpected error occurred. Please try again.");
+    }
+
+    #[test]
+    fn test_get_recovery_actions_with_fennec_error() {
+        let err = FennecError::FileNotFound {
+            path: "/test.txt".to_string(),
+        };
+        let actions = get_recovery_actions(&err);
+        assert!(!actions.is_empty());
+    }
+
+    #[test]
+    fn test_get_recovery_actions_with_other_error() {
+        let err = std::io::Error::new(std::io::ErrorKind::Other, "test");
+        let actions = get_recovery_actions(&err);
+        assert_eq!(actions, vec![RecoveryAction::Retry]);
+    }
+
+    #[test]
+    fn test_is_retryable_error_with_fennec_error() {
+        let err = FennecError::FileRead {
+            path: "/test.txt".to_string(),
+            source: std::io::Error::new(std::io::ErrorKind::NotFound, "test"),
+        };
+        assert!(is_retryable_error(&err));
+    }
+
+    #[test]
+    fn test_is_retryable_error_with_other_error() {
+        let err = std::io::Error::new(std::io::ErrorKind::Other, "test");
+        assert!(!is_retryable_error(&err));
+    }
+
+    // Test Result type alias
+    #[test]
+    fn test_result_type_alias() {
+        let ok_result: Result<String> = Ok("success".to_string());
+        assert!(ok_result.is_ok());
+
+        let err_result: Result<String> = Err(FennecError::FileNotFound {
+            path: "/test".to_string(),
+        });
+        assert!(err_result.is_err());
+    }
+
+    #[test]
+    fn test_recovery_action_equality() {
+        assert_eq!(RecoveryAction::Retry, RecoveryAction::Retry);
+        assert_eq!(
+            RecoveryAction::RetryWithChanges("test".to_string()),
+            RecoveryAction::RetryWithChanges("test".to_string())
+        );
+        assert_ne!(RecoveryAction::Retry, RecoveryAction::None);
+    }
+}

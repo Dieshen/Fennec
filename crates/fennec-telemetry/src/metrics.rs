@@ -476,14 +476,13 @@ impl MetricsUtil {
 }
 
 #[cfg(feature = "prometheus")]
-fn format_labels(labels: &[metrics::Label]) -> String {
-    if labels.is_empty() {
+fn format_labels(labels: std::slice::Iter<'_, metrics::Label>) -> String {
+    let label_pairs: Vec<String> = labels
+        .map(|label| format!("{}=\"{}\"", label.key(), label.value()))
+        .collect();
+    if label_pairs.is_empty() {
         String::new()
     } else {
-        let label_pairs: Vec<String> = labels
-            .iter()
-            .map(|label| format!("{}=\"{}\"", label.key(), label.value()))
-            .collect();
         format!("{{{}}}", label_pairs.join(","))
     }
 }
