@@ -1047,11 +1047,920 @@ enum ConversationIntent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fennec_core::transcript::MessageRole;
 
     #[test]
     fn test_context_config_default() {
         let config = ContextConfig::default();
         assert_eq!(config.max_context_tokens, 4000);
         assert!(config.enable_caching);
+        assert_eq!(config.max_context_items, 20);
+        assert_eq!(config.freshness_threshold_hours, 24);
+        assert_eq!(config.cache_ttl_minutes, 30);
+        assert_eq!(config.discovery_strategies.len(), 4);
+    }
+
+    #[test]
+    fn test_context_config_custom() {
+        let mut config = ContextConfig::default();
+        config.max_context_tokens = 8000;
+        config.max_context_items = 50;
+        config.enable_caching = false;
+        config.freshness_threshold_hours = 48;
+
+        assert_eq!(config.max_context_tokens, 8000);
+        assert_eq!(config.max_context_items, 50);
+        assert!(!config.enable_caching);
+        assert_eq!(config.freshness_threshold_hours, 48);
+    }
+
+    #[test]
+    fn test_context_discovery_strategy_values() {
+        let _ = ContextDiscoveryStrategy::ConversationAnalysis;
+        let _ = ContextDiscoveryStrategy::KeywordExtraction;
+        let _ = ContextDiscoveryStrategy::TopicModeling;
+        let _ = ContextDiscoveryStrategy::SessionHistory;
+        let _ = ContextDiscoveryStrategy::ExplicitQuery;
+    }
+
+    #[test]
+    fn test_context_discovery_strategy_equality() {
+        assert_eq!(
+            ContextDiscoveryStrategy::ConversationAnalysis,
+            ContextDiscoveryStrategy::ConversationAnalysis
+        );
+        assert_ne!(
+            ContextDiscoveryStrategy::KeywordExtraction,
+            ContextDiscoveryStrategy::TopicModeling
+        );
+    }
+
+    #[test]
+    fn test_context_use_case_values() {
+        let _ = ContextUseCase::AIPrompt;
+        let _ = ContextUseCase::CommandPreview;
+        let _ = ContextUseCase::SessionInit;
+        let _ = ContextUseCase::ConversationSupport;
+        let _ = ContextUseCase::KnowledgeSynthesis;
+    }
+
+    #[test]
+    fn test_context_use_case_equality() {
+        assert_eq!(ContextUseCase::AIPrompt, ContextUseCase::AIPrompt);
+        assert_ne!(ContextUseCase::CommandPreview, ContextUseCase::SessionInit);
+    }
+
+    #[test]
+    fn test_context_request_creation() {
+        let session_id = Uuid::new_v4();
+        let context = ConversationContext::default();
+        let messages = vec![Message {
+            id: Uuid::new_v4(),
+            role: MessageRole::User,
+            content: "test message".to_string(),
+            timestamp: chrono::Utc::now(),
+        }];
+
+        let request = ContextRequest {
+            session_id,
+            conversation_context: context,
+            recent_messages: messages.clone(),
+            explicit_query: Some("test query".to_string()),
+            preferred_types: vec![MemoryType::Transcripts],
+            use_case: ContextUseCase::AIPrompt,
+            size_constraints: None,
+        };
+
+        assert_eq!(request.session_id, session_id);
+        assert_eq!(request.recent_messages.len(), 1);
+        assert_eq!(request.explicit_query, Some("test query".to_string()));
+        assert_eq!(request.preferred_types.len(), 1);
+        assert_eq!(request.use_case, ContextUseCase::AIPrompt);
+    }
+
+    #[test]
+    fn test_context_size_constraints_creation() {
+        let mut token_dist = HashMap::new();
+        token_dist.insert(MemoryType::Transcripts, 0.5);
+        token_dist.insert(MemoryType::Guidance, 0.3);
+
+        let constraints = ContextSizeConstraints {
+            max_tokens: Some(5000),
+            max_items: Some(25),
+            token_distribution: Some(token_dist.clone()),
+        };
+
+        assert_eq!(constraints.max_tokens, Some(5000));
+        assert_eq!(constraints.max_items, Some(25));
+        assert!(constraints.token_distribution.is_some());
+    }
+
+    #[test]
+    fn test_context_importance_values() {
+        let _ = ContextImportance::Critical;
+        let _ = ContextImportance::High;
+        let _ = ContextImportance::Medium;
+        let _ = ContextImportance::Low;
+    }
+
+    #[test]
+    fn test_context_importance_equality() {
+        assert_eq!(ContextImportance::Critical, ContextImportance::Critical);
+        assert_ne!(ContextImportance::High, ContextImportance::Low);
+    }
+
+    #[test]
+    fn test_context_importance_serialization() {
+        let importance = ContextImportance::High;
+        let json = serde_json::to_string(&importance).unwrap();
+        assert!(json.contains("High"));
+
+        let deserialized: ContextImportance = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, importance);
+    }
+
+    #[test]
+    fn test_content_classification_values() {
+        let _ = ContentClassification::Technical;
+        let _ = ContentClassification::Conversational;
+        let _ = ContentClassification::Documentation;
+        let _ = ContentClassification::ProblemSolving;
+        let _ = ContentClassification::Planning;
+        let _ = ContentClassification::Learning;
+        let _ = ContentClassification::Reference;
+    }
+
+    #[test]
+    fn test_content_classification_equality() {
+        assert_eq!(
+            ContentClassification::Technical,
+            ContentClassification::Technical
+        );
+        assert_ne!(
+            ContentClassification::Planning,
+            ContentClassification::Learning
+        );
+    }
+
+    #[test]
+    fn test_content_classification_serialization() {
+        let classification = ContentClassification::Technical;
+        let json = serde_json::to_string(&classification).unwrap();
+        assert!(json.contains("Technical"));
+
+        let deserialized: ContentClassification = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, classification);
+    }
+
+    #[test]
+    fn test_context_item_creation() {
+        let item = ContextItem {
+            id: "test-123".to_string(),
+            source_type: MemoryType::Transcripts,
+            title: "Test Context".to_string(),
+            content: "Test content".to_string(),
+            relevance_score: 0.85,
+            importance: ContextImportance::High,
+            timestamp: chrono::Utc::now(),
+            session_id: Some(Uuid::new_v4()),
+            metadata: ContextItemMetadata {
+                estimated_tokens: 100,
+                discovery_strategy: "test".to_string(),
+                matching_keywords: vec!["rust".to_string()],
+                content_classification: ContentClassification::Technical,
+                freshness_score: 0.9,
+            },
+        };
+
+        assert_eq!(item.id, "test-123");
+        assert_eq!(item.relevance_score, 0.85);
+        assert_eq!(item.importance, ContextImportance::High);
+        assert_eq!(item.metadata.estimated_tokens, 100);
+    }
+
+    #[test]
+    fn test_context_item_serialization() {
+        let item = ContextItem {
+            id: "test-456".to_string(),
+            source_type: MemoryType::Guidance,
+            title: "Test".to_string(),
+            content: "Content".to_string(),
+            relevance_score: 0.7,
+            importance: ContextImportance::Medium,
+            timestamp: chrono::Utc::now(),
+            session_id: None,
+            metadata: ContextItemMetadata {
+                estimated_tokens: 50,
+                discovery_strategy: "keyword".to_string(),
+                matching_keywords: vec![],
+                content_classification: ContentClassification::Conversational,
+                freshness_score: 0.5,
+            },
+        };
+
+        let json = serde_json::to_string(&item).unwrap();
+        let deserialized: ContextItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.id, item.id);
+        assert_eq!(deserialized.relevance_score, item.relevance_score);
+    }
+
+    #[test]
+    fn test_context_item_metadata_serialization() {
+        let metadata = ContextItemMetadata {
+            estimated_tokens: 200,
+            discovery_strategy: "topic_modeling".to_string(),
+            matching_keywords: vec!["ai".to_string(), "rust".to_string()],
+            content_classification: ContentClassification::Learning,
+            freshness_score: 0.75,
+        };
+
+        let json = serde_json::to_string(&metadata).unwrap();
+        let deserialized: ContextItemMetadata = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.estimated_tokens, metadata.estimated_tokens);
+        assert_eq!(deserialized.matching_keywords.len(), 2);
+    }
+
+    #[test]
+    fn test_context_summary_creation() {
+        let summary = ContextSummary {
+            description: "Test summary".to_string(),
+            key_topics: vec!["rust".to_string(), "ai".to_string()],
+            time_range: None,
+            memory_types: vec![MemoryType::Transcripts, MemoryType::Guidance],
+        };
+
+        assert_eq!(summary.description, "Test summary");
+        assert_eq!(summary.key_topics.len(), 2);
+        assert_eq!(summary.memory_types.len(), 2);
+    }
+
+    #[test]
+    fn test_context_size_info_creation() {
+        let mut tokens_by_type = HashMap::new();
+        tokens_by_type.insert(MemoryType::Transcripts, 1500);
+        tokens_by_type.insert(MemoryType::Guidance, 500);
+
+        let size_info = ContextSizeInfo {
+            total_tokens: 2000,
+            item_count: 10,
+            tokens_by_type,
+            truncated: false,
+        };
+
+        assert_eq!(size_info.total_tokens, 2000);
+        assert_eq!(size_info.item_count, 10);
+        assert!(!size_info.truncated);
+        assert_eq!(size_info.tokens_by_type.len(), 2);
+    }
+
+    #[test]
+    fn test_context_quality_metrics_creation() {
+        let metrics = ContextQualityMetrics {
+            avg_relevance: 0.75,
+            topic_coverage: 0.8,
+            freshness: 0.6,
+            diversity: 0.9,
+        };
+
+        assert_eq!(metrics.avg_relevance, 0.75);
+        assert_eq!(metrics.topic_coverage, 0.8);
+        assert_eq!(metrics.freshness, 0.6);
+        assert_eq!(metrics.diversity, 0.9);
+    }
+
+    #[test]
+    fn test_context_bundle_metadata_creation() {
+        let metadata = ContextBundleMetadata {
+            created_at: chrono::Utc::now(),
+            request_id: "req-123".to_string(),
+            strategies_used: vec![
+                ContextDiscoveryStrategy::ConversationAnalysis,
+                ContextDiscoveryStrategy::KeywordExtraction,
+            ],
+            execution_time_ms: 250,
+            cache_status: CacheStatus::Miss,
+        };
+
+        assert_eq!(metadata.request_id, "req-123");
+        assert_eq!(metadata.strategies_used.len(), 2);
+        assert_eq!(metadata.execution_time_ms, 250);
+        assert_eq!(metadata.cache_status, CacheStatus::Miss);
+    }
+
+    #[test]
+    fn test_cache_status_values() {
+        let _ = CacheStatus::Hit;
+        let _ = CacheStatus::Miss;
+        let _ = CacheStatus::Partial;
+        let _ = CacheStatus::Disabled;
+    }
+
+    #[test]
+    fn test_cache_status_equality() {
+        assert_eq!(CacheStatus::Hit, CacheStatus::Hit);
+        assert_ne!(CacheStatus::Miss, CacheStatus::Hit);
+    }
+
+    #[test]
+    fn test_context_cache_new() {
+        let cache = ContextCache::new(50);
+        assert_eq!(cache.max_size, 50);
+        assert_eq!(cache.bundles.len(), 0);
+    }
+
+    #[test]
+    fn test_context_cache_store_and_get() {
+        let mut cache = ContextCache::new(10);
+        let bundle = create_test_bundle();
+
+        cache.store("test_key".to_string(), bundle.clone());
+        assert_eq!(cache.bundles.len(), 1);
+
+        let retrieved = cache.get("test_key", 30);
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().items.len(), bundle.items.len());
+    }
+
+    #[test]
+    fn test_context_cache_expiration() {
+        let mut cache = ContextCache::new(10);
+        let bundle = create_test_bundle();
+
+        // Insert bundle with old timestamp
+        let old_time = chrono::Utc::now() - chrono::Duration::hours(2);
+        cache.bundles.insert("old_key".to_string(), (bundle, old_time));
+
+        // Should return None due to TTL expiration
+        let retrieved = cache.get("old_key", 60); // 60 minutes TTL
+        assert!(retrieved.is_none());
+
+        // Should be removed from cache
+        assert_eq!(cache.bundles.len(), 0);
+    }
+
+    #[test]
+    fn test_context_cache_eviction() {
+        let mut cache = ContextCache::new(2);
+
+        cache.store("key1".to_string(), create_test_bundle());
+        cache.store("key2".to_string(), create_test_bundle());
+        assert_eq!(cache.bundles.len(), 2);
+
+        // Adding third should evict oldest
+        cache.store("key3".to_string(), create_test_bundle());
+        assert_eq!(cache.bundles.len(), 2);
+    }
+
+    #[test]
+    fn test_context_cache_get_oldest_key() {
+        let mut cache = ContextCache::new(10);
+
+        cache.store("key1".to_string(), create_test_bundle());
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        cache.store("key2".to_string(), create_test_bundle());
+
+        let oldest = cache.get_oldest_key();
+        assert!(oldest.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_context_engine_new() {
+        let memory_service = std::sync::Arc::new(
+            crate::service::MemoryService::new().await.unwrap()
+        );
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(engine.config.max_context_tokens, 4000);
+        assert!(engine.config.enable_caching);
+    }
+
+    #[tokio::test]
+    async fn test_context_engine_with_config() {
+        let memory_service = std::sync::Arc::new(
+            crate::service::MemoryService::new().await.unwrap()
+        );
+
+        let mut config = ContextConfig::default();
+        config.max_context_tokens = 8000;
+        config.enable_caching = false;
+
+        let engine = ContextEngine::with_config(memory_service, config.clone());
+        assert_eq!(engine.config.max_context_tokens, 8000);
+        assert!(!engine.config.enable_caching);
+    }
+
+    #[test]
+    fn test_classify_importance_critical() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(engine.classify_importance(0.85), ContextImportance::Critical);
+        assert_eq!(engine.classify_importance(0.95), ContextImportance::Critical);
+    }
+
+    #[test]
+    fn test_classify_importance_high() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(engine.classify_importance(0.7), ContextImportance::High);
+        assert_eq!(engine.classify_importance(0.65), ContextImportance::High);
+    }
+
+    #[test]
+    fn test_classify_importance_medium() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(engine.classify_importance(0.5), ContextImportance::Medium);
+        assert_eq!(engine.classify_importance(0.45), ContextImportance::Medium);
+    }
+
+    #[test]
+    fn test_classify_importance_low() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(engine.classify_importance(0.3), ContextImportance::Low);
+        assert_eq!(engine.classify_importance(0.1), ContextImportance::Low);
+    }
+
+    #[test]
+    fn test_classify_content_technical() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(
+            engine.classify_content("Let's implement this function with a new class"),
+            ContentClassification::Technical
+        );
+    }
+
+    #[test]
+    fn test_classify_content_planning() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(
+            engine.classify_content("Here's the plan for the task we need to complete"),
+            ContentClassification::Planning
+        );
+    }
+
+    #[test]
+    fn test_classify_content_problem_solving() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(
+            engine.classify_content("Error occurred, need to debug and fix this issue"),
+            ContentClassification::ProblemSolving
+        );
+    }
+
+    #[test]
+    fn test_classify_content_learning() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(
+            engine.classify_content("Can you explain how this works so I can learn?"),
+            ContentClassification::Learning
+        );
+    }
+
+    #[test]
+    fn test_classify_content_conversational() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert_eq!(
+            engine.classify_content("Hello, how are you today?"),
+            ContentClassification::Conversational
+        );
+    }
+
+    #[test]
+    fn test_calculate_freshness_score_recent() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let now = chrono::Utc::now();
+        let score = engine.calculate_freshness_score(now);
+        assert!(score > 0.9);
+    }
+
+    #[test]
+    fn test_calculate_freshness_score_old() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let old_time = chrono::Utc::now() - chrono::Duration::days(30);
+        let score = engine.calculate_freshness_score(old_time);
+        assert!(score < 0.2);
+    }
+
+    #[test]
+    fn test_is_stop_word() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        assert!(engine.is_stop_word("the"));
+        assert!(engine.is_stop_word("and"));
+        assert!(engine.is_stop_word("or"));
+        assert!(!engine.is_stop_word("implement"));
+        assert!(!engine.is_stop_word("function"));
+    }
+
+    #[test]
+    fn test_extract_key_terms() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let content = "Let's implement rust program testing";
+        let terms = engine.extract_key_terms(content);
+
+        assert!(!terms.is_empty());
+        // Check that stop words and short words are filtered
+        let words: Vec<&str> = terms.split_whitespace().collect();
+        assert!(words.len() <= 3);
+        assert!(!words.contains(&"the"));
+        assert!(!words.contains(&"and"));
+    }
+
+    #[test]
+    fn test_extract_keywords() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let messages = vec![
+            Message {
+                id: Uuid::new_v4(),
+                role: MessageRole::User,
+                content: "Implement authentication with security features".to_string(),
+                timestamp: chrono::Utc::now(),
+            },
+            Message {
+                id: Uuid::new_v4(),
+                role: MessageRole::Assistant,
+                content: "I'll help you implement authentication".to_string(),
+                timestamp: chrono::Utc::now(),
+            },
+        ];
+
+        let keywords = engine.extract_keywords(&messages);
+        assert!(!keywords.is_empty());
+    }
+
+    #[test]
+    fn test_extract_topics_from_context() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let mut context = ConversationContext::default();
+        context.technologies = vec!["rust".to_string(), "tokio".to_string()];
+        context.current_task = Some("implement auth".to_string());
+        context.recent_topics = vec!["security".to_string()];
+
+        let topics = engine.extract_topics_from_context(&context);
+        assert!(topics.len() >= 3);
+        assert!(topics.contains(&"rust".to_string()));
+    }
+
+    #[test]
+    fn test_deduplicate_context_items() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let item1 = create_test_context_item("id-1", 0.8);
+        let item2 = create_test_context_item("id-1", 0.7); // Duplicate
+        let item3 = create_test_context_item("id-2", 0.6);
+
+        let items = vec![item1, item2, item3];
+        let deduplicated = engine.deduplicate_context_items(items);
+
+        assert_eq!(deduplicated.len(), 2);
+    }
+
+    #[test]
+    fn test_is_relevant_for_use_case_ai_prompt() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let item = create_test_context_item("test", 0.8);
+        assert!(engine.is_relevant_for_use_case(&item, &ContextUseCase::AIPrompt));
+    }
+
+    #[test]
+    fn test_is_relevant_for_use_case_command_preview() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let mut item = create_test_context_item("test", 0.8);
+        item.metadata.content_classification = ContentClassification::Technical;
+
+        assert!(engine.is_relevant_for_use_case(&item, &ContextUseCase::CommandPreview));
+    }
+
+    #[test]
+    fn test_is_relevant_for_use_case_session_init() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let mut item = create_test_context_item("test", 0.8);
+        item.metadata.content_classification = ContentClassification::Planning;
+
+        assert!(engine.is_relevant_for_use_case(&item, &ContextUseCase::SessionInit));
+    }
+
+    #[test]
+    fn test_calculate_use_case_bonus_conversation_support() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let mut item = create_test_context_item("test", 0.8);
+        item.metadata.freshness_score = 0.9;
+
+        let bonus = engine.calculate_use_case_bonus(&item, &ContextUseCase::ConversationSupport);
+        assert!(bonus > 0.0);
+    }
+
+    #[test]
+    fn test_calculate_use_case_bonus_command_preview() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let mut item = create_test_context_item("test", 0.8);
+        item.metadata.content_classification = ContentClassification::Technical;
+
+        let bonus = engine.calculate_use_case_bonus(&item, &ContextUseCase::CommandPreview);
+        assert_eq!(bonus, 0.15);
+    }
+
+    #[test]
+    fn test_calculate_quality_metrics_empty() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let metrics = engine.calculate_quality_metrics(&[]);
+        assert_eq!(metrics.avg_relevance, 0.0);
+        assert_eq!(metrics.topic_coverage, 0.0);
+        assert_eq!(metrics.freshness, 0.0);
+        assert_eq!(metrics.diversity, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_quality_metrics_with_items() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let items = vec![
+            create_test_context_item("id-1", 0.8),
+            create_test_context_item("id-2", 0.6),
+        ];
+
+        let metrics = engine.calculate_quality_metrics(&items);
+        assert!(metrics.avg_relevance > 0.0);
+        assert!(metrics.diversity >= 0.0);
+    }
+
+    #[test]
+    fn test_generate_context_summary() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let items = vec![
+            create_test_context_item("id-1", 0.8),
+            create_test_context_item("id-2", 0.6),
+        ];
+
+        let summary = engine.generate_context_summary(&items);
+        assert!(summary.description.contains("2 items"));
+        assert!(!summary.memory_types.is_empty());
+    }
+
+    #[test]
+    fn test_calculate_size_info() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let items = vec![
+            create_test_context_item("id-1", 0.8),
+            create_test_context_item("id-2", 0.6),
+        ];
+
+        let size_info = engine.calculate_size_info(&items);
+        assert_eq!(size_info.item_count, 2);
+        assert!(size_info.total_tokens > 0);
+    }
+
+    #[test]
+    fn test_apply_size_constraints_item_limit() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let items = vec![
+            create_test_context_item("id-1", 0.8),
+            create_test_context_item("id-2", 0.7),
+            create_test_context_item("id-3", 0.6),
+        ];
+
+        let request = create_test_context_request_with_constraints(Some(2), None);
+        let constrained = engine.apply_size_constraints(items, &request);
+
+        assert_eq!(constrained.len(), 2);
+    }
+
+    #[test]
+    fn test_apply_size_constraints_token_limit() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let items = vec![
+            create_test_context_item("id-1", 0.8),
+            create_test_context_item("id-2", 0.7),
+        ];
+
+        let request = create_test_context_request_with_constraints(None, Some(150));
+        let constrained = engine.apply_size_constraints(items, &request);
+
+        // Should fit at most 1 item with 100 tokens each
+        assert!(constrained.len() <= 2);
+    }
+
+    #[test]
+    fn test_score_and_rank_items() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let mut items = vec![
+            create_test_context_item("id-1", 0.5),
+            create_test_context_item("id-2", 0.8),
+            create_test_context_item("id-3", 0.6),
+        ];
+
+        let request = create_test_context_request();
+        engine.score_and_rank_items(&mut items, &request);
+
+        // Should be sorted by score descending
+        assert!(items[0].relevance_score >= items[1].relevance_score);
+        assert!(items[1].relevance_score >= items[2].relevance_score);
+    }
+
+    #[test]
+    fn test_generate_cache_key() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let request = create_test_context_request();
+        let key = engine.generate_cache_key(&request);
+
+        assert!(key.starts_with("ctx_"));
+        assert!(key.len() > 4);
+    }
+
+    #[test]
+    fn test_generate_cache_key_consistency() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let request = create_test_context_request();
+        let key1 = engine.generate_cache_key(&request);
+        let key2 = engine.generate_cache_key(&request);
+
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_analyze_conversation_patterns_implementation() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let messages = vec![Message {
+            id: Uuid::new_v4(),
+            role: MessageRole::User,
+            content: "Let's implement a new authentication system".to_string(),
+            timestamp: chrono::Utc::now(),
+        }];
+
+        let analysis = engine.analyze_conversation_patterns(&messages);
+        assert!(!analysis.suggested_queries.is_empty());
+    }
+
+    #[test]
+    fn test_analyze_conversation_patterns_debugging() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let messages = vec![Message {
+            id: Uuid::new_v4(),
+            role: MessageRole::User,
+            content: "I'm getting an error when running the tests".to_string(),
+            timestamp: chrono::Utc::now(),
+        }];
+
+        let analysis = engine.analyze_conversation_patterns(&messages);
+        assert!(!analysis.suggested_queries.is_empty());
+    }
+
+    #[test]
+    fn test_analyze_conversation_patterns_learning() {
+        let memory_service = create_test_memory_service();
+        let engine = ContextEngine::new(memory_service);
+
+        let messages = vec![Message {
+            id: Uuid::new_v4(),
+            role: MessageRole::User,
+            content: "Can you explain how async/await works in Rust?".to_string(),
+            timestamp: chrono::Utc::now(),
+        }];
+
+        let analysis = engine.analyze_conversation_patterns(&messages);
+        assert!(!analysis.suggested_queries.is_empty());
+    }
+
+    // Helper functions for tests
+    fn create_test_memory_service() -> std::sync::Arc<crate::service::MemoryService> {
+        std::sync::Arc::new(
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(async { crate::service::MemoryService::new().await.unwrap() })
+        )
+    }
+
+    fn create_test_bundle() -> ContextBundle {
+        ContextBundle {
+            items: vec![create_test_context_item("test", 0.8)],
+            summary: ContextSummary {
+                description: "Test".to_string(),
+                key_topics: vec![],
+                time_range: None,
+                memory_types: vec![],
+            },
+            size_info: ContextSizeInfo {
+                total_tokens: 100,
+                item_count: 1,
+                tokens_by_type: HashMap::new(),
+                truncated: false,
+            },
+            quality_metrics: ContextQualityMetrics {
+                avg_relevance: 0.8,
+                topic_coverage: 0.7,
+                freshness: 0.9,
+                diversity: 0.6,
+            },
+            metadata: ContextBundleMetadata {
+                created_at: chrono::Utc::now(),
+                request_id: "test".to_string(),
+                strategies_used: vec![],
+                execution_time_ms: 0,
+                cache_status: CacheStatus::Miss,
+            },
+        }
+    }
+
+    fn create_test_context_item(id: &str, score: f64) -> ContextItem {
+        ContextItem {
+            id: id.to_string(),
+            source_type: MemoryType::Transcripts,
+            title: "Test".to_string(),
+            content: "Test content with some words".to_string(),
+            relevance_score: score,
+            importance: ContextImportance::Medium,
+            timestamp: chrono::Utc::now(),
+            session_id: None,
+            metadata: ContextItemMetadata {
+                estimated_tokens: 100,
+                discovery_strategy: "test".to_string(),
+                matching_keywords: vec![],
+                content_classification: ContentClassification::Technical,
+                freshness_score: 0.8,
+            },
+        }
+    }
+
+    fn create_test_context_request() -> ContextRequest {
+        ContextRequest {
+            session_id: Uuid::new_v4(),
+            conversation_context: ConversationContext::default(),
+            recent_messages: vec![],
+            explicit_query: None,
+            preferred_types: vec![MemoryType::Transcripts],
+            use_case: ContextUseCase::AIPrompt,
+            size_constraints: None,
+        }
+    }
+
+    fn create_test_context_request_with_constraints(
+        max_items: Option<usize>,
+        max_tokens: Option<usize>,
+    ) -> ContextRequest {
+        let mut request = create_test_context_request();
+        request.size_constraints = Some(ContextSizeConstraints {
+            max_tokens,
+            max_items,
+            token_distribution: None,
+        });
+        request
     }
 }

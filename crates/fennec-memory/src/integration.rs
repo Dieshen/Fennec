@@ -529,30 +529,578 @@ pub trait SimpleCommandIntegration {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::{
+        CacheStatus, ContextBundleMetadata, ContextDiscoveryStrategy, ContextImportance, ContextItem,
+        ContextItemMetadata, ContextQualityMetrics, ContextSizeInfo, ContextSummary, ContentClassification,
+    };
 
     #[test]
     fn test_context_requirements_default() {
         let requirements = ContextRequirements::default();
         assert_eq!(requirements.max_tokens, Some(2000));
         assert!(!requirements.include_full_content);
+        assert_eq!(requirements.preferred_memory_types.len(), 3);
+        assert_eq!(requirements.min_relevance, Some(0.3));
     }
 
     #[test]
-    fn test_provider_context_injection() {
+    fn test_context_requirements_custom() {
+        let requirements = ContextRequirements {
+            max_tokens: Some(5000),
+            preferred_memory_types: vec![crate::service::MemoryType::Guidance],
+            min_relevance: Some(0.5),
+            include_full_content: true,
+        };
+
+        assert_eq!(requirements.max_tokens, Some(5000));
+        assert_eq!(requirements.preferred_memory_types.len(), 1);
+        assert_eq!(requirements.min_relevance, Some(0.5));
+        assert!(requirements.include_full_content);
+    }
+
+    #[test]
+    fn test_context_requirements_serialization() {
+        let requirements = ContextRequirements::default();
+        let json = serde_json::to_string(&requirements).unwrap();
+        let deserialized: ContextRequirements = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.max_tokens, requirements.max_tokens);
+        assert_eq!(deserialized.include_full_content, requirements.include_full_content);
+    }
+
+    #[test]
+    fn test_context_requirements_no_max_tokens() {
+        let requirements = ContextRequirements {
+            max_tokens: None,
+            preferred_memory_types: vec![],
+            min_relevance: None,
+            include_full_content: false,
+        };
+
+        assert!(requirements.max_tokens.is_none());
+        assert!(requirements.min_relevance.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_context_injection_service_new() {
+        let memory_service = std::sync::Arc::new(MemoryService::new().await.unwrap());
+        let context_engine = crate::context::ContextEngine::new(memory_service.clone());
+
+        let service = ContextInjectionService::new(context_engine, memory_service);
+        // Service created successfully - just verify it exists
+        assert!(std::mem::size_of_val(&service) > 0);
+    }
+
+    #[test]
+    fn test_provider_context_injection_creation() {
         let injection = ProviderContextInjection {
             system_prompt_enhancement: "Enhanced prompt".to_string(),
             user_context: "User context".to_string(),
-            metadata: crate::context::ContextBundleMetadata {
-                created_at: chrono::Utc::now(),
-                request_id: "test".to_string(),
-                strategies_used: Vec::new(),
-                execution_time_ms: 100,
-                cache_status: crate::context::CacheStatus::Miss,
-            },
+            metadata: create_test_metadata(),
             estimated_tokens: 500,
         };
 
         assert_eq!(injection.estimated_tokens, 500);
-        assert!(!injection.system_prompt_enhancement.is_empty());
+        assert_eq!(injection.system_prompt_enhancement, "Enhanced prompt");
+        assert_eq!(injection.user_context, "User context");
+    }
+
+    #[test]
+    fn test_provider_context_injection_empty() {
+        let injection = ProviderContextInjection {
+            system_prompt_enhancement: String::new(),
+            user_context: String::new(),
+            metadata: create_test_metadata(),
+            estimated_tokens: 0,
+        };
+
+        assert_eq!(injection.estimated_tokens, 0);
+        assert!(injection.system_prompt_enhancement.is_empty());
+    }
+
+    #[test]
+    fn test_command_context_injection_creation() {
+        let injection = CommandContextInjection {
+            relevant_guidance: vec!["guidance1".to_string(), "guidance2".to_string()],
+            similar_executions: vec!["exec1".to_string()],
+            warnings: vec!["warning1".to_string()],
+            suggestions: vec!["suggestion1".to_string()],
+        };
+
+        assert_eq!(injection.relevant_guidance.len(), 2);
+        assert_eq!(injection.similar_executions.len(), 1);
+        assert_eq!(injection.warnings.len(), 1);
+        assert_eq!(injection.suggestions.len(), 1);
+    }
+
+    #[test]
+    fn test_command_context_injection_empty() {
+        let injection = CommandContextInjection {
+            relevant_guidance: vec![],
+            similar_executions: vec![],
+            warnings: vec![],
+            suggestions: vec![],
+        };
+
+        assert!(injection.relevant_guidance.is_empty());
+        assert!(injection.similar_executions.is_empty());
+        assert!(injection.warnings.is_empty());
+        assert!(injection.suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_session_init_context_injection_creation() {
+        let mut project_context = HashMap::new();
+        project_context.insert("file1".to_string(), "content1".to_string());
+
+        let injection = SessionInitContextInjection {
+            project_context,
+            available_commands: vec!["command1".to_string()],
+            recent_patterns: vec!["pattern1".to_string()],
+            suggestions: vec!["suggestion1".to_string()],
+        };
+
+        assert_eq!(injection.project_context.len(), 1);
+        assert_eq!(injection.available_commands.len(), 1);
+        assert_eq!(injection.recent_patterns.len(), 1);
+        assert_eq!(injection.suggestions.len(), 1);
+    }
+
+    #[test]
+    fn test_session_init_context_injection_empty() {
+        let injection = SessionInitContextInjection {
+            project_context: HashMap::new(),
+            available_commands: vec![],
+            recent_patterns: vec![],
+            suggestions: vec![],
+        };
+
+        assert!(injection.project_context.is_empty());
+        assert!(injection.available_commands.is_empty());
+        assert!(injection.recent_patterns.is_empty());
+    }
+
+    #[test]
+    fn test_enhanced_memory_injection_creation() {
+        let traditional = crate::service::MemoryInjection {
+            guidance: vec![],
+            conversation_history: vec![],
+            session_context: ConversationContext::default(),
+            estimated_tokens: 0,
+        };
+
+        let injection = EnhancedMemoryInjection {
+            traditional,
+            context_bundle: create_test_context_bundle(),
+            formatted_context: "Formatted context".to_string(),
+        };
+
+        assert!(!injection.formatted_context.is_empty());
+        assert_eq!(injection.context_bundle.items.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_format_system_prompt_context_empty() {
+        let service = create_test_service().await;
+        let bundle = create_empty_context_bundle();
+
+        let formatted = service.format_system_prompt_context(&bundle);
+        assert_eq!(formatted, "");
+    }
+
+    #[tokio::test]
+    async fn test_format_system_prompt_context_with_items() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+
+        let formatted = service.format_system_prompt_context(&bundle);
+        assert!(formatted.contains("Relevant Context"));
+    }
+
+    #[tokio::test]
+    async fn test_format_system_prompt_context_high_score_only() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+        bundle.items[0].relevance_score = 0.5; // Below 0.7 threshold
+
+        let formatted = service.format_system_prompt_context(&bundle);
+        // Should not contain the item since score is below threshold
+        assert!(!formatted.contains("Test"));
+    }
+
+    #[tokio::test]
+    async fn test_format_system_prompt_context_with_topics() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+        bundle.summary.key_topics = vec!["rust".to_string(), "testing".to_string()];
+
+        let formatted = service.format_system_prompt_context(&bundle);
+        assert!(formatted.contains("Current Session Topics"));
+        assert!(formatted.contains("rust"));
+        assert!(formatted.contains("testing"));
+    }
+
+    #[tokio::test]
+    async fn test_format_user_context_empty() {
+        let service = create_test_service().await;
+        let bundle = create_empty_context_bundle();
+
+        let formatted = service.format_user_context(&bundle);
+        assert!(formatted.contains("No relevant context found"));
+    }
+
+    #[tokio::test]
+    async fn test_format_user_context_with_items() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+
+        let formatted = service.format_user_context(&bundle);
+        assert!(formatted.contains("Found 1 relevant context items"));
+        assert!(formatted.contains("Test"));
+    }
+
+    #[tokio::test]
+    async fn test_format_user_context_many_items() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+
+        // Add more items
+        for i in 0..5 {
+            bundle.items.push(create_test_context_item(&format!("item-{}", i), 0.7));
+        }
+
+        let formatted = service.format_user_context(&bundle);
+        assert!(formatted.contains("... and"));
+        assert!(formatted.contains("more items"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_guidance_for_command() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+
+        bundle.items[0].source_type = crate::service::MemoryType::Guidance;
+        bundle.items[0].content = "This is guidance for the test command".to_string();
+
+        let guidance = service.extract_guidance_for_command(&bundle, "test");
+        assert_eq!(guidance.len(), 1);
+        assert!(guidance[0].contains("test command"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_guidance_for_command_no_match() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+
+        let guidance = service.extract_guidance_for_command(&bundle, "nonexistent");
+        assert_eq!(guidance.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_extract_guidance_for_command_case_insensitive() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+
+        bundle.items[0].source_type = crate::service::MemoryType::Guidance;
+        bundle.items[0].content = "This is guidance for the TEST command".to_string();
+
+        let guidance = service.extract_guidance_for_command(&bundle, "test");
+        assert_eq!(guidance.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_extract_similar_executions() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+
+        bundle.items[0].source_type = crate::service::MemoryType::Transcripts;
+        bundle.items[0].content = "Previously ran test command successfully".to_string();
+
+        let executions = service.extract_similar_executions(&bundle, "test");
+        assert_eq!(executions.len(), 1);
+        assert!(executions[0].contains("Previous execution"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_similar_executions_no_match() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+
+        let executions = service.extract_similar_executions(&bundle, "nonexistent");
+        assert_eq!(executions.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_generate_command_warnings() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+        let args = serde_json::json!({});
+
+        let warnings = service.generate_command_warnings(&bundle, &args);
+        // Currently returns empty - testing the signature
+        assert!(warnings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_generate_command_suggestions() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+
+        bundle.items[0].source_type = crate::service::MemoryType::Guidance;
+        bundle.items[0].content = "Best practice for test command: use --verbose".to_string();
+        bundle.items[0].title = "Test best practices".to_string();
+
+        let suggestions = service.generate_command_suggestions(&bundle, "test");
+        assert_eq!(suggestions.len(), 1);
+        assert!(suggestions[0].contains("Best practice"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_command_suggestions_no_match() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+
+        let suggestions = service.generate_command_suggestions(&bundle, "test");
+        assert_eq!(suggestions.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_extract_project_context() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+
+        bundle.items[0].source_type = crate::service::MemoryType::MemoryFiles;
+        bundle.items[0].title = "project.md".to_string();
+        bundle.items[0].content = "Project documentation".to_string();
+
+        let context = service.extract_project_context(&bundle);
+        assert_eq!(context.len(), 1);
+        assert!(context.contains_key("project.md"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_project_context_empty() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+
+        let context = service.extract_project_context(&bundle);
+        assert_eq!(context.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_extract_available_commands() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+
+        bundle.items[0].source_type = crate::service::MemoryType::Guidance;
+        bundle.items[0].content = "Command: fennec test\nUsage: fennec test <args>".to_string();
+
+        let commands = service.extract_available_commands(&bundle);
+        assert_eq!(commands.len(), 2);
+        assert!(commands[0].contains("Command:"));
+        assert!(commands[1].contains("Usage:"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_available_commands_no_match() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+
+        let commands = service.extract_available_commands(&bundle);
+        assert_eq!(commands.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_extract_recent_patterns() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+
+        bundle.items[0].source_type = crate::service::MemoryType::Transcripts;
+        bundle.items[0].title = "Recent test execution".to_string();
+
+        let patterns = service.extract_recent_patterns(&bundle);
+        assert_eq!(patterns.len(), 1);
+        assert!(patterns[0].contains("Recent activity"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_recent_patterns_empty() {
+        let service = create_test_service().await;
+        let bundle = create_empty_context_bundle();
+
+        let patterns = service.extract_recent_patterns(&bundle);
+        assert_eq!(patterns.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_generate_session_suggestions_empty() {
+        let service = create_test_service().await;
+        let bundle = create_empty_context_bundle();
+
+        let suggestions = service.generate_session_suggestions(&bundle);
+        assert_eq!(suggestions.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_generate_session_suggestions_with_topics() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+        bundle.summary.key_topics = vec!["rust".to_string(), "testing".to_string()];
+
+        let suggestions = service.generate_session_suggestions(&bundle);
+        assert!(suggestions.len() > 0);
+        assert!(suggestions[0].contains("Continue working on"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_session_suggestions_with_errors() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+        bundle.items[0].content = "An error occurred during execution".to_string();
+
+        let suggestions = service.generate_session_suggestions(&bundle);
+        assert!(suggestions.iter().any(|s| s.contains("Review recent errors")));
+    }
+
+    #[tokio::test]
+    async fn test_generate_session_suggestions_with_failures() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+        bundle.items[0].content = "Test failed with exception".to_string();
+
+        let suggestions = service.generate_session_suggestions(&bundle);
+        assert!(suggestions.iter().any(|s| s.contains("Review recent errors")));
+    }
+
+    #[tokio::test]
+    async fn test_format_enhanced_context() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+
+        let formatted = service.format_enhanced_context(&bundle);
+        assert!(formatted.contains("# Enhanced Context"));
+        assert!(formatted.contains("Quality Score"));
+        assert!(formatted.contains("Items Found"));
+        assert!(formatted.contains("Total Tokens"));
+    }
+
+    #[tokio::test]
+    async fn test_format_enhanced_context_with_topics() {
+        let service = create_test_service().await;
+        let mut bundle = create_test_context_bundle();
+        bundle.summary.key_topics = vec!["rust".to_string(), "ai".to_string()];
+
+        let formatted = service.format_enhanced_context(&bundle);
+        assert!(formatted.contains("## Key Topics"));
+        assert!(formatted.contains("- rust"));
+        assert!(formatted.contains("- ai"));
+    }
+
+    #[tokio::test]
+    async fn test_format_enhanced_context_items() {
+        let service = create_test_service().await;
+        let bundle = create_test_context_bundle();
+
+        let formatted = service.format_enhanced_context(&bundle);
+        assert!(formatted.contains("## Context Items"));
+        assert!(formatted.contains("1. **Test**"));
+        assert!(formatted.contains("Score: 0.80"));
+    }
+
+    #[tokio::test]
+    async fn test_format_enhanced_context_empty() {
+        let service = create_test_service().await;
+        let bundle = create_empty_context_bundle();
+
+        let formatted = service.format_enhanced_context(&bundle);
+        assert!(formatted.contains("# Enhanced Context"));
+        assert!(formatted.contains("**Items Found**: 0"));
+    }
+
+    // Helper functions for tests
+    fn create_test_metadata() -> ContextBundleMetadata {
+        ContextBundleMetadata {
+            created_at: chrono::Utc::now(),
+            request_id: "test-req".to_string(),
+            strategies_used: vec![ContextDiscoveryStrategy::KeywordExtraction],
+            execution_time_ms: 100,
+            cache_status: CacheStatus::Miss,
+        }
+    }
+
+    fn create_test_context_item(id: &str, score: f64) -> ContextItem {
+        ContextItem {
+            id: id.to_string(),
+            source_type: crate::service::MemoryType::Transcripts,
+            title: "Test".to_string(),
+            content: "Test content".to_string(),
+            relevance_score: score,
+            importance: ContextImportance::High,
+            timestamp: chrono::Utc::now(),
+            session_id: Some(Uuid::new_v4()),
+            metadata: ContextItemMetadata {
+                estimated_tokens: 100,
+                discovery_strategy: "test".to_string(),
+                matching_keywords: vec![],
+                content_classification: ContentClassification::Technical,
+                freshness_score: 0.9,
+            },
+        }
+    }
+
+    fn create_test_context_bundle() -> crate::context::ContextBundle {
+        crate::context::ContextBundle {
+            items: vec![create_test_context_item("test-1", 0.8)],
+            summary: ContextSummary {
+                description: "Test bundle".to_string(),
+                key_topics: vec![],
+                time_range: None,
+                memory_types: vec![crate::service::MemoryType::Transcripts],
+            },
+            size_info: ContextSizeInfo {
+                total_tokens: 100,
+                item_count: 1,
+                tokens_by_type: HashMap::new(),
+                truncated: false,
+            },
+            quality_metrics: ContextQualityMetrics {
+                avg_relevance: 0.8,
+                topic_coverage: 0.7,
+                freshness: 0.9,
+                diversity: 0.6,
+            },
+            metadata: create_test_metadata(),
+        }
+    }
+
+    fn create_empty_context_bundle() -> crate::context::ContextBundle {
+        crate::context::ContextBundle {
+            items: vec![],
+            summary: ContextSummary {
+                description: "Empty bundle".to_string(),
+                key_topics: vec![],
+                time_range: None,
+                memory_types: vec![],
+            },
+            size_info: ContextSizeInfo {
+                total_tokens: 0,
+                item_count: 0,
+                tokens_by_type: HashMap::new(),
+                truncated: false,
+            },
+            quality_metrics: ContextQualityMetrics {
+                avg_relevance: 0.0,
+                topic_coverage: 0.0,
+                freshness: 0.0,
+                diversity: 0.0,
+            },
+            metadata: create_test_metadata(),
+        }
+    }
+
+    async fn create_test_service() -> ContextInjectionService {
+        let memory_service = std::sync::Arc::new(MemoryService::new().await.unwrap());
+        let context_engine = crate::context::ContextEngine::new(memory_service.clone());
+        ContextInjectionService::new(context_engine, memory_service)
     }
 }
