@@ -149,3 +149,224 @@ impl Config {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use tokio::fs;
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert_eq!(config.provider.default_model, "gpt-4");
+        assert_eq!(config.provider.timeout_seconds, 30);
+        assert_eq!(config.security.default_sandbox_level, "workspace-write");
+        assert!(config.security.audit_log_enabled);
+        assert_eq!(config.memory.max_transcript_size, 10_000);
+        assert!(config.memory.enable_agents_md);
+        assert_eq!(config.tui.theme, "default");
+        assert_eq!(config.tui.key_bindings.quit, "Ctrl+C");
+    }
+
+    #[test]
+    fn test_provider_config_default() {
+        let config = Config::default();
+        assert!(config.provider.openai_api_key.is_none());
+        assert!(config.provider.base_url.is_none());
+        assert_eq!(config.provider.timeout_seconds, 30);
+    }
+
+    #[test]
+    fn test_security_config_default() {
+        let config = Config::default();
+        assert_eq!(config.security.default_sandbox_level, "workspace-write");
+        assert!(config.security.audit_log_enabled);
+        assert!(config.security.audit_log_path.is_none());
+    }
+
+    #[test]
+    fn test_memory_config_default() {
+        let config = Config::default();
+        assert_eq!(config.memory.storage_path, PathBuf::from(".fennec"));
+        assert_eq!(config.memory.max_transcript_size, 10_000);
+        assert!(config.memory.enable_agents_md);
+    }
+
+    #[test]
+    fn test_tui_config_default() {
+        let config = Config::default();
+        assert_eq!(config.tui.theme, "default");
+        assert_eq!(config.tui.key_bindings.quit, "Ctrl+C");
+        assert_eq!(config.tui.key_bindings.help, "F1");
+        assert_eq!(config.tui.key_bindings.clear, "Ctrl+L");
+    }
+
+    #[cfg(feature = "telemetry")]
+    #[test]
+    fn test_telemetry_config_default() {
+        let config = Config::default();
+        assert!(config.telemetry.is_some());
+        let telemetry = config.telemetry.unwrap();
+        assert!(telemetry.enabled);
+        assert!(telemetry.config_path.is_none());
+    }
+
+    #[test]
+    fn test_config_serialization() {
+        let config = Config::default();
+        let serialized = toml::to_string(&config).unwrap();
+        assert!(serialized.contains("default_model"));
+        assert!(serialized.contains("gpt-4"));
+    }
+
+    #[test]
+    fn test_config_deserialization() {
+        let toml_str = r#"
+            [provider]
+            default_model = "gpt-4-turbo"
+            timeout_seconds = 60
+
+            [security]
+            default_sandbox_level = "read-only"
+            audit_log_enabled = false
+
+            [memory]
+            storage_path = ".fennec-data"
+            max_transcript_size = 20000
+            enable_agents_md = false
+
+            [tui]
+            theme = "dark"
+
+            [tui.key_bindings]
+            quit = "q"
+            help = "h"
+            clear = "c"
+        "#;
+
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.provider.default_model, "gpt-4-turbo");
+        assert_eq!(config.provider.timeout_seconds, 60);
+        assert_eq!(config.security.default_sandbox_level, "read-only");
+        assert!(!config.security.audit_log_enabled);
+        assert_eq!(config.memory.storage_path, PathBuf::from(".fennec-data"));
+        assert_eq!(config.memory.max_transcript_size, 20000);
+        assert!(!config.memory.enable_agents_md);
+        assert_eq!(config.tui.theme, "dark");
+        assert_eq!(config.tui.key_bindings.quit, "q");
+    }
+
+    #[tokio::test]
+    async fn test_load_with_nonexistent_file() {
+        let temp_path = PathBuf::from("/tmp/nonexistent_config.toml");
+        let config = Config::load(Some(&temp_path)).await.unwrap();
+        // Should return default config
+        assert_eq!(config.provider.default_model, "gpt-4");
+    }
+
+    #[tokio::test]
+    async fn test_load_with_existing_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("test_config.toml");
+
+        let toml_content = r#"
+            [provider]
+            default_model = "gpt-4-turbo"
+            timeout_seconds = 120
+
+            [security]
+            default_sandbox_level = "strict"
+            audit_log_enabled = true
+
+            [memory]
+            storage_path = "/tmp/fennec"
+            max_transcript_size = 50000
+            enable_agents_md = true
+
+            [tui]
+            theme = "light"
+
+            [tui.key_bindings]
+            quit = "Ctrl+Q"
+            help = "F2"
+            clear = "Ctrl+K"
+        "#;
+
+        fs::write(&config_path, toml_content).await.unwrap();
+
+        let config = Config::load(Some(&config_path)).await.unwrap();
+        assert_eq!(config.provider.default_model, "gpt-4-turbo");
+        assert_eq!(config.provider.timeout_seconds, 120);
+        assert_eq!(config.security.default_sandbox_level, "strict");
+        assert_eq!(config.memory.max_transcript_size, 50000);
+        assert_eq!(config.tui.theme, "light");
+        assert_eq!(config.tui.key_bindings.help, "F2");
+    }
+
+    #[tokio::test]
+    async fn test_load_with_invalid_toml() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("invalid_config.toml");
+
+        fs::write(&config_path, "invalid toml content {{{")
+            .await
+            .unwrap();
+
+        let result = Config::load(Some(&config_path)).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), crate::FennecError::ConfigLoadFailed { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_load_env_overrides() {
+        // Set environment variables
+        env::set_var("OPENAI_API_KEY", "test-api-key");
+        env::set_var("OPENAI_BASE_URL", "https://test.openai.com");
+        env::set_var("FENNEC_DEFAULT_MODEL", "gpt-3.5-turbo");
+
+        let mut config = Config::default();
+        config.load_env_overrides();
+
+        assert_eq!(config.provider.openai_api_key, Some("test-api-key".to_string()));
+        assert_eq!(config.provider.base_url, Some("https://test.openai.com".to_string()));
+        assert_eq!(config.provider.default_model, "gpt-3.5-turbo");
+
+        // Clean up
+        env::remove_var("OPENAI_API_KEY");
+        env::remove_var("OPENAI_BASE_URL");
+        env::remove_var("FENNEC_DEFAULT_MODEL");
+    }
+
+    #[test]
+    fn test_default_config_path() {
+        let result = Config::default_config_path();
+        // Should succeed on most systems
+        if result.is_ok() {
+            let path = result.unwrap();
+            assert!(path.to_string_lossy().contains("fennec"));
+            assert!(path.to_string_lossy().ends_with("config.toml"));
+        }
+    }
+
+    #[test]
+    fn test_key_bindings_clone() {
+        let bindings = KeyBindings {
+            quit: "q".to_string(),
+            help: "h".to_string(),
+            clear: "c".to_string(),
+        };
+        let cloned = bindings.clone();
+        assert_eq!(bindings.quit, cloned.quit);
+        assert_eq!(bindings.help, cloned.help);
+        assert_eq!(bindings.clear, cloned.clear);
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config = Config::default();
+        let cloned = config.clone();
+        assert_eq!(config.provider.default_model, cloned.provider.default_model);
+        assert_eq!(config.tui.theme, cloned.tui.theme);
+    }
+}
