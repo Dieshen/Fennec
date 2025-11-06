@@ -341,10 +341,74 @@ impl CommandExecutor for IndexCommand {
 mod tests {
     use super::*;
     use tokio_util::sync::CancellationToken;
+    use tempfile::TempDir;
+    use crate::project_index::{ProjectIndex, ModuleNode, ModuleHierarchy};
+    use crate::dependency_graph::DependencyGraph;
+    use crate::symbols::SymbolIndex;
 
     #[test]
     fn test_default_analysis_type() {
         assert_eq!(default_analysis_type(), "stats");
+    }
+
+    #[test]
+    fn test_index_args_default() {
+        let json = serde_json::json!({});
+        let args: IndexArgs = serde_json::from_value(json).unwrap();
+        assert_eq!(args.analysis_type, "stats");
+        assert!(args.file_path.is_none());
+        assert!(!args.detailed);
+    }
+
+    #[test]
+    fn test_index_args_serialization() {
+        let args = IndexArgs {
+            analysis_type: "deps".to_string(),
+            file_path: Some("src/main.rs".to_string()),
+            detailed: true,
+        };
+
+        let json = serde_json::to_value(&args).unwrap();
+        let deserialized: IndexArgs = serde_json::from_value(json).unwrap();
+
+        assert_eq!(deserialized.analysis_type, "deps");
+        assert_eq!(deserialized.file_path, Some("src/main.rs".to_string()));
+        assert!(deserialized.detailed);
+    }
+
+    #[test]
+    fn test_index_args_all_analysis_types() {
+        for analysis_type in &["stats", "deps", "symbols", "impact", "modules"] {
+            let json = serde_json::json!({
+                "analysis_type": analysis_type
+            });
+            let args: IndexArgs = serde_json::from_value(json).unwrap();
+            assert_eq!(args.analysis_type, *analysis_type);
+        }
+    }
+
+    #[test]
+    fn test_index_command_new() {
+        let command = IndexCommand::new();
+        assert_eq!(command.descriptor.name, "index");
+        assert_eq!(command.descriptor.version, "1.0.0");
+        assert!(!command.descriptor.supports_preview);
+        assert!(!command.descriptor.supports_dry_run);
+    }
+
+    #[test]
+    fn test_index_command_default() {
+        let command = IndexCommand::default();
+        assert_eq!(command.descriptor.name, "index");
+    }
+
+    #[test]
+    fn test_index_command_descriptor() {
+        let command = IndexCommand::new();
+        let descriptor = command.descriptor();
+        assert_eq!(descriptor.name, "index");
+        assert_eq!(descriptor.capabilities_required, vec![Capability::ReadFile]);
+        assert_eq!(descriptor.sandbox_level_required, SandboxLevel::ReadOnly);
     }
 
     #[tokio::test]
@@ -389,5 +453,399 @@ mod tests {
             "analysis_type": "impact"
         });
         assert!(command.validate_args(&impact_no_file).is_err());
+    }
+
+    #[test]
+    fn test_validate_args_all_valid_types() {
+        let command = IndexCommand::new();
+
+        for analysis_type in &["stats", "deps", "symbols", "impact", "modules"] {
+            let args = if *analysis_type == "impact" {
+                serde_json::json!({
+                    "analysis_type": analysis_type,
+                    "file_path": "src/lib.rs"
+                })
+            } else {
+                serde_json::json!({
+                    "analysis_type": analysis_type
+                })
+            };
+
+            assert!(command.validate_args(&args).is_ok());
+        }
+    }
+
+    #[test]
+    fn test_validate_args_invalid_json() {
+        let command = IndexCommand::new();
+        let invalid_json = serde_json::json!({
+            "analysis_type": 123  // Should be string
+        });
+
+        let result = command.validate_args(&invalid_json);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_preview() {
+        let command = IndexCommand::new();
+        let args = serde_json::json!({
+            "analysis_type": "stats"
+        });
+
+        let context = CommandContext {
+            session_id: Uuid::new_v4(),
+            user_id: None,
+            workspace_path: Some("/test".to_string()),
+            sandbox_level: SandboxLevel::ReadOnly,
+            dry_run: false,
+            preview_only: false,
+            cancellation_token: CancellationToken::new(),
+            action_log: None,
+        };
+
+        let preview = command.preview(&args, &context).await.unwrap();
+        assert!(preview.description.contains("stats"));
+        assert!(!preview.requires_approval);
+    }
+
+    #[tokio::test]
+    async fn test_preview_with_invalid_args() {
+        let command = IndexCommand::new();
+        let args = serde_json::json!({
+            "analysis_type": 123
+        });
+
+        let context = CommandContext {
+            session_id: Uuid::new_v4(),
+            user_id: None,
+            workspace_path: Some("/test".to_string()),
+            sandbox_level: SandboxLevel::ReadOnly,
+            dry_run: false,
+            preview_only: false,
+            cancellation_token: CancellationToken::new(),
+            action_log: None,
+        };
+
+        let result = command.preview(&args, &context).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_format_statistics_basic() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let index = ProjectIndex {
+            dependency_graph: DependencyGraph::new(),
+            symbol_index: SymbolIndex::new(),
+            module_hierarchy: ModuleHierarchy {
+                root: ModuleNode {
+                    name: "root".to_string(),
+                    path: temp_dir.path().to_path_buf(),
+                    children: vec![],
+                    symbols: vec![],
+                },
+            },
+            workspace_path: temp_dir.path().to_path_buf(),
+            indexed_at: chrono::Utc::now(),
+        };
+
+        let output = command.format_statistics(&index, false).unwrap();
+        assert!(output.contains("Project Statistics"));
+        assert!(output.contains("Packages:"));
+        assert!(output.contains("Symbols:"));
+        assert!(output.contains("Modules:"));
+    }
+
+    #[test]
+    fn test_format_statistics_detailed() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let index = ProjectIndex {
+            dependency_graph: DependencyGraph::new(),
+            symbol_index: SymbolIndex::new(),
+            module_hierarchy: ModuleHierarchy {
+                root: ModuleNode {
+                    name: "root".to_string(),
+                    path: temp_dir.path().to_path_buf(),
+                    children: vec![],
+                    symbols: vec![],
+                },
+            },
+            workspace_path: temp_dir.path().to_path_buf(),
+            indexed_at: chrono::Utc::now(),
+        };
+
+        let output = command.format_statistics(&index, true).unwrap();
+        assert!(output.contains("Project Statistics"));
+        assert!(output.contains("Package List:"));
+    }
+
+    #[test]
+    fn test_format_dependencies_basic() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let index = ProjectIndex {
+            dependency_graph: DependencyGraph::new(),
+            symbol_index: SymbolIndex::new(),
+            module_hierarchy: ModuleHierarchy {
+                root: ModuleNode {
+                    name: "root".to_string(),
+                    path: temp_dir.path().to_path_buf(),
+                    children: vec![],
+                    symbols: vec![],
+                },
+            },
+            workspace_path: temp_dir.path().to_path_buf(),
+            indexed_at: chrono::Utc::now(),
+        };
+
+        let output = command.format_dependencies(&index, false).unwrap();
+        assert!(output.contains("Dependency Graph"));
+    }
+
+    #[test]
+    fn test_format_dependencies_detailed() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let index = ProjectIndex {
+            dependency_graph: DependencyGraph::new(),
+            symbol_index: SymbolIndex::new(),
+            module_hierarchy: ModuleHierarchy {
+                root: ModuleNode {
+                    name: "root".to_string(),
+                    path: temp_dir.path().to_path_buf(),
+                    children: vec![],
+                    symbols: vec![],
+                },
+            },
+            workspace_path: temp_dir.path().to_path_buf(),
+            indexed_at: chrono::Utc::now(),
+        };
+
+        let output = command.format_dependencies(&index, true).unwrap();
+        assert!(output.contains("Dependency Graph"));
+    }
+
+    #[test]
+    fn test_format_symbols_basic() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let index = ProjectIndex {
+            dependency_graph: DependencyGraph::new(),
+            symbol_index: SymbolIndex::new(),
+            module_hierarchy: ModuleHierarchy {
+                root: ModuleNode {
+                    name: "root".to_string(),
+                    path: temp_dir.path().to_path_buf(),
+                    children: vec![],
+                    symbols: vec![],
+                },
+            },
+            workspace_path: temp_dir.path().to_path_buf(),
+            indexed_at: chrono::Utc::now(),
+        };
+
+        let output = command.format_symbols(&index, false).unwrap();
+        assert!(output.contains("Symbol Index"));
+        assert!(output.contains("Total symbols:"));
+    }
+
+    #[test]
+    fn test_format_symbols_detailed() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let index = ProjectIndex {
+            dependency_graph: DependencyGraph::new(),
+            symbol_index: SymbolIndex::new(),
+            module_hierarchy: ModuleHierarchy {
+                root: ModuleNode {
+                    name: "root".to_string(),
+                    path: temp_dir.path().to_path_buf(),
+                    children: vec![],
+                    symbols: vec![],
+                },
+            },
+            workspace_path: temp_dir.path().to_path_buf(),
+            indexed_at: chrono::Utc::now(),
+        };
+
+        let output = command.format_symbols(&index, true).unwrap();
+        assert!(output.contains("Symbol Index"));
+    }
+
+    #[test]
+    fn test_format_impact_analysis() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let index = ProjectIndex {
+            dependency_graph: DependencyGraph::new(),
+            symbol_index: SymbolIndex::new(),
+            module_hierarchy: ModuleHierarchy {
+                root: ModuleNode {
+                    name: "root".to_string(),
+                    path: temp_dir.path().to_path_buf(),
+                    children: vec![],
+                    symbols: vec![],
+                },
+            },
+            workspace_path: temp_dir.path().to_path_buf(),
+            indexed_at: chrono::Utc::now(),
+        };
+
+        let file_path = std::path::Path::new("src/lib.rs");
+        let output = command.format_impact_analysis(&index, file_path).unwrap();
+        assert!(output.contains("Impact Analysis"));
+        assert!(output.contains("File:"));
+        assert!(output.contains("Affected Symbols"));
+        assert!(output.contains("Affected Packages"));
+    }
+
+    #[test]
+    fn test_format_module_hierarchy_basic() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let index = ProjectIndex {
+            dependency_graph: DependencyGraph::new(),
+            symbol_index: SymbolIndex::new(),
+            module_hierarchy: ModuleHierarchy {
+                root: ModuleNode {
+                    name: "root".to_string(),
+                    path: temp_dir.path().to_path_buf(),
+                    children: vec![],
+                    symbols: vec!["test_symbol".to_string()],
+                },
+            },
+            workspace_path: temp_dir.path().to_path_buf(),
+            indexed_at: chrono::Utc::now(),
+        };
+
+        let output = command.format_module_hierarchy(&index, false).unwrap();
+        assert!(output.contains("Module Hierarchy"));
+        assert!(output.contains("root"));
+    }
+
+    #[test]
+    fn test_format_module_hierarchy_detailed() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let index = ProjectIndex {
+            dependency_graph: DependencyGraph::new(),
+            symbol_index: SymbolIndex::new(),
+            module_hierarchy: ModuleHierarchy {
+                root: ModuleNode {
+                    name: "root".to_string(),
+                    path: temp_dir.path().to_path_buf(),
+                    children: vec![],
+                    symbols: vec!["symbol1".to_string(), "symbol2".to_string()],
+                },
+            },
+            workspace_path: temp_dir.path().to_path_buf(),
+            indexed_at: chrono::Utc::now(),
+        };
+
+        let output = command.format_module_hierarchy(&index, true).unwrap();
+        assert!(output.contains("Module Hierarchy"));
+        assert!(output.contains("symbols"));
+    }
+
+    #[test]
+    fn test_format_module_node_basic() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let node = ModuleNode {
+            name: "test_module".to_string(),
+            path: temp_dir.path().to_path_buf(),
+            children: vec![],
+            symbols: vec![],
+        };
+
+        let mut output = String::new();
+        command.format_module_node(&node, 0, false, &mut output);
+        assert!(output.contains("test_module"));
+    }
+
+    #[test]
+    fn test_format_module_node_with_children() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let child = ModuleNode {
+            name: "child".to_string(),
+            path: temp_dir.path().join("child"),
+            children: vec![],
+            symbols: vec![],
+        };
+
+        let parent = ModuleNode {
+            name: "parent".to_string(),
+            path: temp_dir.path().to_path_buf(),
+            children: vec![child],
+            symbols: vec!["parent_symbol".to_string()],
+        };
+
+        let mut output = String::new();
+        command.format_module_node(&parent, 0, true, &mut output);
+        assert!(output.contains("parent"));
+        assert!(output.contains("child"));
+    }
+
+    #[test]
+    fn test_format_module_node_depth() {
+        let command = IndexCommand::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let node = ModuleNode {
+            name: "test".to_string(),
+            path: temp_dir.path().to_path_buf(),
+            children: vec![],
+            symbols: vec!["symbol".to_string()],
+        };
+
+        let mut output1 = String::new();
+        command.format_module_node(&node, 0, true, &mut output1);
+
+        let mut output2 = String::new();
+        command.format_module_node(&node, 2, true, &mut output2);
+
+        // Deeper nodes should have more indentation
+        assert!(output2.len() > output1.len());
+    }
+
+    #[test]
+    fn test_index_args_clone() {
+        let args = IndexArgs {
+            analysis_type: "stats".to_string(),
+            file_path: Some("src/lib.rs".to_string()),
+            detailed: true,
+        };
+
+        let cloned = args.clone();
+        assert_eq!(cloned.analysis_type, args.analysis_type);
+        assert_eq!(cloned.file_path, args.file_path);
+        assert_eq!(cloned.detailed, args.detailed);
+    }
+
+    #[test]
+    fn test_index_args_debug() {
+        let args = IndexArgs {
+            analysis_type: "deps".to_string(),
+            file_path: None,
+            detailed: false,
+        };
+
+        let debug = format!("{:?}", args);
+        assert!(debug.contains("IndexArgs"));
+        assert!(debug.contains("deps"));
     }
 }
