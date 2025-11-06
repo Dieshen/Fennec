@@ -310,7 +310,6 @@ mod tests {
     use crate::action_log::Action;
     use tempfile::TempDir;
     use tokio_util::sync::CancellationToken;
-    use std::path::PathBuf;
 
     #[tokio::test]
     async fn test_undo_file_creation() {

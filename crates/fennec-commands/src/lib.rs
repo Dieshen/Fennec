@@ -6,6 +6,7 @@ pub mod diff;
 pub mod edit;
 pub mod error;
 pub mod file_ops;
+pub mod find_symbol;
 pub mod history;
 pub mod hunks;
 pub mod plan;
@@ -14,6 +15,7 @@ pub mod registry;
 pub mod rename;
 pub mod run;
 pub mod search;
+pub mod symbols;
 pub mod summarize;
 pub mod summarize_enhanced;
 pub mod undo;
@@ -38,6 +40,7 @@ pub use edit::{EditArgs, EditCommand};
 pub use file_ops::{
     EditStrategy, FileEditRequest, FileEditResult, FileOperations, FileOperationsConfig,
 };
+pub use find_symbol::{FindSymbolArgs, FindSymbolCommand};
 pub use history::{HistoryArgs, HistoryCommand};
 pub use plan::{PlanArgs, PlanCommand};
 pub use redo::{RedoArgs, RedoCommand};
@@ -48,6 +51,7 @@ pub use summarize::{SummarizeArgs, SummarizeCommand};
 pub use summarize_enhanced::{
     EnhancedSummarizeArgs, EnhancedSummarizeCommand, OutputDestination, SummaryDepth, SummaryType,
 };
+pub use symbols::{Symbol, SymbolIndex, SymbolType, Visibility as SymbolVisibility};
 pub use undo::{UndoArgs, UndoCommand};
 
 /// Create a fully initialized command registry with all built-in commands

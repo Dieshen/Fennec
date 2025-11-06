@@ -70,6 +70,10 @@ chrono = { version = "0.4", features = ["serde"] }
 # Diff generation
 similar = "2.3"
 
+# Rust parsing for symbol-aware search
+syn = { version = "2.0", features = ["full", "visit"] }
+proc-macro2 = "1.0"
+
 # Environment variables
 dotenvy = "0.15"
 

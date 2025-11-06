@@ -133,10 +133,10 @@ pub fn split_diff_into_hunks(
     let old_lines: Vec<&str> = old_content.lines().collect();
     let new_lines: Vec<&str> = new_content.lines().collect();
 
-    for (idx, change) in diff.iter_all_changes().enumerate() {
+    for (_idx, change) in diff.iter_all_changes().enumerate() {
         match change.tag() {
             ChangeTag::Delete => {
-                if let Some((start, _, ref mut old, ref mut new)) = current_hunk {
+                if let Some((_start, _, ref mut old, ref mut _new)) = current_hunk {
                     // Continue current hunk
                     old.push(change.value().trim_end().to_string());
                 } else {
@@ -151,7 +151,7 @@ pub fn split_diff_into_hunks(
                 }
             }
             ChangeTag::Insert => {
-                if let Some((start, end, ref mut old, ref mut new)) = current_hunk {
+                if let Some((_start, _end, ref mut _old, ref mut new)) = current_hunk {
                     // Continue current hunk
                     new.push(change.value().trim_end().to_string());
                 } else {
@@ -277,7 +277,6 @@ pub fn apply_hunks(original_content: &str, hunks: &[Hunk]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
     fn test_hunk_creation() {

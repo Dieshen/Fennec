@@ -32,7 +32,7 @@ async fn test_command_registry_initialization() -> Result<()> {
     let commands = registry.list_commands().await;
     let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
 
-    // Expect all 10 built-in commands
+    // Expect all 11 built-in commands
     assert!(command_names.contains(&"plan".to_string()));
     assert!(command_names.contains(&"create".to_string()));
     assert!(command_names.contains(&"delete".to_string()));
@@ -41,11 +41,12 @@ async fn test_command_registry_initialization() -> Result<()> {
     assert!(command_names.contains(&"run".to_string()));
     assert!(command_names.contains(&"diff".to_string()));
     assert!(command_names.contains(&"search".to_string()));
+    assert!(command_names.contains(&"find-symbol".to_string()));
     assert!(command_names.contains(&"summarize".to_string()));
     assert!(command_names.contains(&"summarize_enhanced".to_string()));
 
     // Ensure we didn't unintentionally register duplicates
-    assert_eq!(command_names.len(), 10);
+    assert_eq!(command_names.len(), 11);
 
     Ok(())
 }
