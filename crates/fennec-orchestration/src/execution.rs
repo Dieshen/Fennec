@@ -617,6 +617,7 @@ impl CommandExecutionEngine {
                 dry_run: false,
                 preview_only: false,
                 cancellation_token: tokio_util::sync::CancellationToken::new(),
+            action_log: None,
             };
             async move {
                 if let Err(e) = engine.execute_command_internal(execution_id, context).await {
@@ -917,6 +918,7 @@ mod tests {
             dry_run: false,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
+            action_log: None,
         };
 
         let execution_id = engine
@@ -945,6 +947,7 @@ mod tests {
             dry_run: false,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
+            action_log: None,
         };
 
         // Submit a command that requires approval

@@ -1,3 +1,4 @@
+pub mod action_log;
 pub mod common;
 pub mod create;
 pub mod delete;
@@ -5,18 +6,22 @@ pub mod diff;
 pub mod edit;
 pub mod error;
 pub mod file_ops;
+pub mod history;
 pub mod plan;
+pub mod redo;
 pub mod registry;
 pub mod rename;
 pub mod run;
 pub mod search;
 pub mod summarize;
 pub mod summarize_enhanced;
+pub mod undo;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export key types and functions for easy use
+pub use action_log::{Action, ActionLog, ActionState};
 pub use common::{format_file_size, initialize_builtin_commands, is_text_file, truncate_text};
 pub use error::{CommandError, Result as CommandResult};
 pub use registry::{
@@ -31,7 +36,9 @@ pub use edit::{EditArgs, EditCommand};
 pub use file_ops::{
     EditStrategy, FileEditRequest, FileEditResult, FileOperations, FileOperationsConfig,
 };
+pub use history::{HistoryArgs, HistoryCommand};
 pub use plan::{PlanArgs, PlanCommand};
+pub use redo::{RedoArgs, RedoCommand};
 pub use rename::{RenameArgs, RenameCommand};
 pub use run::{RunArgs, RunCommand};
 pub use search::{SearchArgs, SearchCommand, SearchResult};
@@ -39,6 +46,7 @@ pub use summarize::{SummarizeArgs, SummarizeCommand};
 pub use summarize_enhanced::{
     EnhancedSummarizeArgs, EnhancedSummarizeCommand, OutputDestination, SummaryDepth, SummaryType,
 };
+pub use undo::{UndoArgs, UndoCommand};
 
 /// Create a fully initialized command registry with all built-in commands
 ///
@@ -71,6 +79,7 @@ pub use summarize_enhanced::{
 ///         dry_run: false,
 ///         preview_only: false,
 ///         cancellation_token: CancellationToken::new(),
+///         action_log: None,
 ///     };
 ///     
 ///     let args = serde_json::json!({

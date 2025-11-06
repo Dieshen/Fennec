@@ -251,6 +251,7 @@ mod tests {
             dry_run: false,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
+            action_log: None,
         };
 
         let result = command.execute(&args, &context).await.unwrap();
@@ -285,6 +286,7 @@ mod tests {
             dry_run: false,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
+            action_log: None,
         };
 
         let result = command.execute(&args, &context).await.unwrap();
@@ -316,6 +318,7 @@ mod tests {
             dry_run: false,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
+            action_log: None,
         };
 
         let result = command.execute(&args, &context).await.unwrap();
@@ -344,6 +347,7 @@ mod tests {
             dry_run: false,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
+            action_log: None,
         };
 
         let result = command.execute(&args, &context).await.unwrap();
@@ -371,6 +375,7 @@ mod tests {
             dry_run: false,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
+            action_log: None,
         };
 
         let result = command.execute(&args, &context).await.unwrap();
@@ -398,6 +403,7 @@ mod tests {
             dry_run: true,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
+            action_log: None,
         };
 
         let result = command.execute(&args, &context).await.unwrap();
