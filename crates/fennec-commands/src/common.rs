@@ -10,8 +10,9 @@ use crate::registry::CommandRegistry;
 use crate::{
     commit_template::CommitTemplateCommand, create::CreateCommand, delete::DeleteCommand,
     diff::DiffCommand, edit::EditCommand, find_symbol::FindSymbolCommand,
-    fix_errors::FixErrorsCommand, plan::PlanCommand, pr_summary::PrSummaryCommand,
-    rename::RenameCommand, run::RunCommand, search::SearchCommand, summarize::SummarizeCommand,
+    fix_errors::FixErrorsCommand, index::IndexCommand, plan::PlanCommand,
+    pr_summary::PrSummaryCommand, quick_actions::QuickActionCommand, rename::RenameCommand,
+    run::RunCommand, search::SearchCommand, summarize::SummarizeCommand,
     summarize_enhanced::EnhancedSummarizeCommand, test_watch::TestWatchCommand,
 };
 
@@ -57,6 +58,12 @@ pub async fn initialize_builtin_commands() -> Result<CommandRegistry> {
         .await?;
     registry
         .register_builtin(Arc::new(TestWatchCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(IndexCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(QuickActionCommand::new()))
         .await?;
     registry
         .register_builtin(Arc::new(SummarizeCommand::new()))
@@ -208,8 +215,8 @@ mod tests {
         let registry = initialize_builtin_commands().await.unwrap();
         let commands = registry.list_commands().await;
 
-        // Should have all 15 built-in commands (including all Sprint 3 features)
-        assert_eq!(commands.len(), 15);
+        // Should have all 17 built-in commands (including Sprint 4 features)
+        assert_eq!(commands.len(), 17);
 
         let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
         assert!(command_names.contains(&"plan".to_string()));
@@ -225,6 +232,8 @@ mod tests {
         assert!(command_names.contains(&"pr-summary".to_string()));
         assert!(command_names.contains(&"commit-template".to_string()));
         assert!(command_names.contains(&"test-watch".to_string()));
+        assert!(command_names.contains(&"index".to_string()));
+        assert!(command_names.contains(&"quick-action".to_string()));
         assert!(command_names.contains(&"summarize".to_string()));
         assert!(command_names.contains(&"summarize_enhanced".to_string()));
     }

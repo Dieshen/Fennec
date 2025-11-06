@@ -11,12 +11,14 @@ A powerful, secure, and extensible TUI AI assistant for developers. Fennec bring
 - **Real-time streaming** responses with syntax highlighting
 
 ### 🤖 **AI-Powered Development Commands**
-- **`plan`** - Generate structured implementation plans and task breakdowns
-- **`edit`** - Make precise file edits with intelligent diff previews
-- **`run`** - Execute shell commands safely within sandbox constraints
-- **`diff`** - Show detailed file changes and git-style diffs
-- **`summarize`** - Create session summaries and memory updates
-- **Enhanced commands** with depth and type controls for specialized workflows
+- **17 built-in commands** covering planning, file ops, search, testing, and git workflows
+- **`plan`** - Structured implementation plans with complexity assessment
+- **`edit`** - Multi-strategy file editing (search/replace, line range, append/prepend)
+- **`search`** & **`find-symbol`** - Full-text and AST-based code navigation
+- **`test-watch`** - Auto-rerun tests with file watching and smart selection
+- **`fix-errors`** - Parse compiler errors and auto-suggest fixes
+- **`index`** - Project analysis with dependency graphs and impact analysis
+- **`quick-action`** - 8 workflow templates for common development tasks
 
 ### 🔒 **Enterprise-Grade Security**
 - **Three-tier sandbox model**: `read-only`, `workspace-write`, `danger-full-access`
@@ -152,27 +154,57 @@ Fennec is architected as a modular Rust workspace with clear separation of conce
 - **Audit Everything** - Complete traceability of all system actions
 - **Memory Aware** - Context-aware operations with persistent learning
 
-## 🛠️ Core Commands
+## 🛠️ Built-in Commands
+
+Fennec includes **17 production-ready commands** covering the complete development workflow:
 
 ### Planning & Analysis
-- **`plan <task>`** - Generate structured implementation plans with step-by-step breakdowns
-- **`diff [file]`** - Show file changes with syntax-highlighted git-style diffs
+- **`plan`** - Generate structured implementation plans with complexity assessment and task breakdowns
+- **`diff`** - Show detailed file changes with syntax-highlighted git-style diffs and unified format
+- **`summarize`** - Create session summaries with configurable depth and output destinations
+- **`summarize_enhanced`** - Advanced summarization with memory integration and progress tracking
 
 ### File Operations
-- **`edit <file> <instruction>`** - Make precise file edits with intelligent diff previews
-- **File operations** - Built-in support for reading, writing, and analyzing code files
+- **`create`** - Create new files and directories with parent directory support
+- **`edit`** - Make precise file edits with multiple strategies (search/replace, line range, append, prepend)
+- **`rename`** - Rename files and directories with conflict detection
+- **`delete`** - Delete files and directories with safety checks and recursive options
+
+### Code Search & Navigation
+- **`search`** - Full-text search across files with regex support, case-insensitive mode, and context lines
+- **`find-symbol`** - Symbol-aware search for Rust functions, structs, traits, and enums using AST parsing
 
 ### Execution & Testing
-- **`run <command>`** - Execute shell commands safely within sandbox constraints
-- **Shell integration** - Secure command execution with approval workflows
+- **`run`** - Execute shell commands safely within sandbox constraints with timeout and output capture
+- **`test-watch`** - Auto-rerun tests on file changes with smart test selection and real-time status
 
-### Memory & Documentation
-- **`summarize [--depth <level>] [--type <summary|progress|brief>]`** - Create comprehensive session summaries
-- **Memory management** - Automatic context preservation and recall
+### Git Integration
+- **`pr-summary`** - Generate comprehensive PR summaries from git history and changed files
+- **`commit-template`** - Create conventional commit messages with scope detection and breaking change analysis
 
-### Enhanced Commands
-- **Enhanced summarize** with output destination control and depth settings
-- **Configurable workflows** with macro support and command chaining
+### Advanced Features
+- **`fix-errors`** - Parse compiler errors and auto-suggest fixes with confidence scoring
+- **`index`** - Analyze project structure with dependency graphs, symbol indexing, and impact analysis
+- **`quick-action`** - Execute pre-defined workflow templates for common development tasks
+
+### Undo/Redo System
+- **`undo`** - Revert file operations with state restoration
+- **`redo`** - Reapply undone operations
+- **`history`** - View action log with detailed operation history
+
+### Command Categories
+
+**Read-Only Commands** (safe for exploration):
+- `plan`, `diff`, `search`, `find-symbol`, `summarize`, `summarize_enhanced`, `index`
+
+**Write Commands** (modify workspace):
+- `create`, `edit`, `rename`, `delete`, `undo`, `redo`
+
+**Execution Commands** (run code/tools):
+- `run`, `test-watch`, `fix-errors`, `pr-summary`, `commit-template`
+
+**Advanced Workflows**:
+- `quick-action` - 8 built-in templates including "fix-error", "add-tests", "document-function", "optimize-code", "security-review"
 
 ## 🔐 Security Model
 
@@ -252,15 +284,24 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
 
 ### Project Status
 
-🎯 **Release Ready** - Fennec has completed MVP development and is ready for production use:
+🎯 **Production Ready** - Fennec has completed MVP and Phase 2 feature development:
 
+**Phase 1 - MVP** (Completed):
 - ✅ **Milestone 0** - Project scaffold and workspace setup
 - ✅ **Milestone 1** - Core conversation loop and TUI
 - ✅ **Milestone 2** - Editing and sandbox enforcement
 - ✅ **Milestone 3** - Memory and summaries
 - ✅ **Milestone 4** - Hardening and release readiness
 
-See [docs/MVP.md](docs/MVP.md) for the complete development roadmap and [docs/RELEASE.md](docs/RELEASE.md) for release notes.
+**Phase 2 - Enhanced Features** (Completed):
+- ✅ **Sprint 1** - Search command and file operations (create, rename, delete)
+- ✅ **Sprint 2** - Hunk approval, action log, and undo/redo system
+- ✅ **Sprint 3** - Symbol search, git integration, error fixes, test watching
+- ✅ **Sprint 4** - Project indexing, quick action templates
+
+**Test Coverage**: 145 tests passing (132 unit + 12 integration + 1 doc test)
+
+See [docs/MVP.md](docs/MVP.md) and [docs/PHASE2_ROADMAP.md](docs/PHASE2_ROADMAP.md) for complete development roadmaps.
 
 ## Inspiration
 

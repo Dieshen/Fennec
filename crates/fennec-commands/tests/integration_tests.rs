@@ -32,7 +32,7 @@ async fn test_command_registry_initialization() -> Result<()> {
     let commands = registry.list_commands().await;
     let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
 
-    // Expect all 15 built-in commands (including Sprint 3 features)
+    // Expect all 17 built-in commands (including Sprint 4 features)
     assert!(command_names.contains(&"plan".to_string()));
     assert!(command_names.contains(&"create".to_string()));
     assert!(command_names.contains(&"delete".to_string()));
@@ -46,11 +46,13 @@ async fn test_command_registry_initialization() -> Result<()> {
     assert!(command_names.contains(&"pr-summary".to_string()));
     assert!(command_names.contains(&"commit-template".to_string()));
     assert!(command_names.contains(&"test-watch".to_string()));
+    assert!(command_names.contains(&"index".to_string()));
+    assert!(command_names.contains(&"quick-action".to_string()));
     assert!(command_names.contains(&"summarize".to_string()));
     assert!(command_names.contains(&"summarize_enhanced".to_string()));
 
     // Ensure we didn't unintentionally register duplicates
-    assert_eq!(command_names.len(), 15);
+    assert_eq!(command_names.len(), 17);
 
     Ok(())
 }

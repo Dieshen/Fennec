@@ -235,7 +235,7 @@ pub fn extract_symbols(file_path: &Path, content: &str) -> Result<Vec<Symbol>, S
 }
 
 /// Symbol index for fast lookup
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolIndex {
     symbols: Vec<Symbol>,
     by_name: HashMap<String, Vec<usize>>,
