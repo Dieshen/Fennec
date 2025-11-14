@@ -120,7 +120,7 @@ jobs:
           
     - name: Upload benchmark results
       if: matrix.test-suite == 'performance' && matrix.rust-version == 'stable'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-results
         path: target/criterion/
@@ -205,7 +205,7 @@ jobs:
         echo "Comprehensive integration tests completed successfully." >> test-report.md
         
     - name: Upload test artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: comprehensive-test-results
         path: |
@@ -271,7 +271,7 @@ jobs:
         cargo llvm-cov report --html --output-dir coverage-report
         
     - name: Upload coverage report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-report
         path: coverage-report/
