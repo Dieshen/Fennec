@@ -5,12 +5,15 @@
       "Bash(cargo check:*)",
       "Bash(cargo:*)",
       "WebSearch",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
   },
-  "outputStyle": "Expert Engineer",
+  "enabledPlugins": {
+    "rust-best-practices@fennec-local": true
+  },
   "extraKnownMarketplaces": {
     "fennec-local": {
       "source": {
@@ -19,7 +22,5 @@
       }
     }
   },
-  "enabledPlugins": {
-    "rust-best-practices@fennec-local": true
-  }
+  "outputStyle": "Expert Engineer"
 }
