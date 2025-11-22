@@ -2,7 +2,7 @@
 
 use crate::{config::MetricsConfig, Error, Result};
 use metrics::{
-    counter, gauge, histogram, Counter, Gauge, Histogram, Key, KeyName, Metadata, Recorder,
+    counter, histogram, Counter, Gauge, Histogram, Key, KeyName, Metadata, Recorder,
     SharedString, Unit,
 };
 use std::collections::HashMap;
@@ -450,7 +450,7 @@ impl MetricsUtil {
                     if line.starts_with("VmRSS:") {
                         if let Some(kb_str) = line.split_whitespace().nth(1) {
                             if let Ok(kb) = kb_str.parse::<f64>() {
-                                gauge!("fennec.memory.rss_kb").set(kb);
+                                metrics::gauge!("fennec.memory.rss_kb").set(kb);
                             }
                         }
                     }
@@ -467,7 +467,7 @@ impl MetricsUtil {
             if let Ok(loadavg) = std::fs::read_to_string("/proc/loadavg") {
                 if let Some(load1_str) = loadavg.split_whitespace().next() {
                     if let Ok(load1) = load1_str.parse::<f64>() {
-                        gauge!("fennec.system.load1").set(load1);
+                        metrics::gauge!("fennec.system.load1").set(load1);
                     }
                 }
             }

@@ -373,8 +373,9 @@ mod tests {
         let result = ProjectIndex::build_symbol_index(temp_dir.path()).await;
         assert!(result.is_ok());
         let index = result.unwrap();
-        // Should have found some symbols
-        assert!(index.len() >= 0); // May be 0 if parser has issues
+        // Should have found some symbols (may be 0 if parser has issues)
+        // Just verify we got a valid index back
+        let _count = index.len();
     }
 
     #[tokio::test]

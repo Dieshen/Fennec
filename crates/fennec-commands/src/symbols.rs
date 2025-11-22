@@ -94,10 +94,9 @@ impl SymbolVisitor {
         }
     }
 
-    fn get_line_number(_span: proc_macro2::Span) -> usize {
-        // Note: Span line information is not available in proc_macro2 without special features
-        // Return 1 as a default, or use a different approach if line numbers are critical
-        1
+    fn get_line_number(span: proc_macro2::Span) -> usize {
+        // Extract line number from span (requires proc-macro2 span-locations feature)
+        span.start().line
     }
 }
 
