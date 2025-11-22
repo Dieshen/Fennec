@@ -1,0 +1,8 @@
+{
+  "name": "rust-best-practices",
+  "description": "Comprehensive Rust best practices and code quality guidelines for Rust projects",
+  "version": "1.0.0",
+  "author": {
+    "name": "Fennec Project"
+  }
+}

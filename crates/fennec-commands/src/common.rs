@@ -8,8 +8,12 @@ use std::sync::Arc;
 
 use crate::registry::CommandRegistry;
 use crate::{
-    diff::DiffCommand, edit::EditCommand, plan::PlanCommand, run::RunCommand,
-    summarize::SummarizeCommand, summarize_enhanced::EnhancedSummarizeCommand,
+    commit_template::CommitTemplateCommand, create::CreateCommand, delete::DeleteCommand,
+    diff::DiffCommand, edit::EditCommand, find_symbol::FindSymbolCommand,
+    fix_errors::FixErrorsCommand, index::IndexCommand, plan::PlanCommand,
+    pr_summary::PrSummaryCommand, quick_actions::QuickActionCommand, rename::RenameCommand,
+    run::RunCommand, search::SearchCommand, summarize::SummarizeCommand,
+    summarize_enhanced::EnhancedSummarizeCommand, test_watch::TestWatchCommand,
 };
 
 /// Initialize the command registry with all built-in commands
@@ -20,6 +24,15 @@ pub async fn initialize_builtin_commands() -> Result<CommandRegistry> {
     let plan_command = PlanCommand::new().await?;
     registry.register_builtin(Arc::new(plan_command)).await?;
     registry
+        .register_builtin(Arc::new(CreateCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(DeleteCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(RenameCommand::new()))
+        .await?;
+    registry
         .register_builtin(Arc::new(EditCommand::new()))
         .await?;
     registry
@@ -27,6 +40,30 @@ pub async fn initialize_builtin_commands() -> Result<CommandRegistry> {
         .await?;
     registry
         .register_builtin(Arc::new(DiffCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(SearchCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(FindSymbolCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(FixErrorsCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(PrSummaryCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(CommitTemplateCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(TestWatchCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(IndexCommand::new()))
+        .await?;
+    registry
+        .register_builtin(Arc::new(QuickActionCommand::new()))
         .await?;
     registry
         .register_builtin(Arc::new(SummarizeCommand::new()))
@@ -178,14 +215,25 @@ mod tests {
         let registry = initialize_builtin_commands().await.unwrap();
         let commands = registry.list_commands().await;
 
-        // Should have all 6 built-in commands (including enhanced summarize)
-        assert_eq!(commands.len(), 6);
+        // Should have all 17 built-in commands (including Sprint 4 features)
+        assert_eq!(commands.len(), 17);
 
         let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
         assert!(command_names.contains(&"plan".to_string()));
+        assert!(command_names.contains(&"create".to_string()));
+        assert!(command_names.contains(&"delete".to_string()));
+        assert!(command_names.contains(&"rename".to_string()));
         assert!(command_names.contains(&"edit".to_string()));
         assert!(command_names.contains(&"run".to_string()));
         assert!(command_names.contains(&"diff".to_string()));
+        assert!(command_names.contains(&"search".to_string()));
+        assert!(command_names.contains(&"find-symbol".to_string()));
+        assert!(command_names.contains(&"fix-errors".to_string()));
+        assert!(command_names.contains(&"pr-summary".to_string()));
+        assert!(command_names.contains(&"commit-template".to_string()));
+        assert!(command_names.contains(&"test-watch".to_string()));
+        assert!(command_names.contains(&"index".to_string()));
+        assert!(command_names.contains(&"quick-action".to_string()));
         assert!(command_names.contains(&"summarize".to_string()));
         assert!(command_names.contains(&"summarize_enhanced".to_string()));
     }

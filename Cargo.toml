@@ -56,6 +56,7 @@ walkdir = "2.4"
 # Cryptography for secure storage
 ring = "0.17"
 hex = "0.4"
+md5 = "0.7"
 
 # CLI parsing
 clap = { version = "4.0", features = ["derive"] }
@@ -68,6 +69,10 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Diff generation
 similar = "2.3"
+
+# Rust parsing for symbol-aware search
+syn = { version = "2.0", features = ["full", "visit"] }
+proc-macro2 = "1.0"
 
 # Environment variables
 dotenvy = "0.15"

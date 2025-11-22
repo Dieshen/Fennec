@@ -652,3 +652,566 @@ pub fn theme_not_found(theme: &str) -> TuiError {
         theme: theme.to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test error variants and display
+    #[test]
+    fn test_terminal_init_failed_error() {
+        let err = TuiError::TerminalInitFailed {
+            reason: "crossterm init failed".to_string(),
+        };
+        assert!(err.to_string().contains("Failed to initialize terminal"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+    }
+
+    #[test]
+    fn test_terminal_too_small_error() {
+        let err = TuiError::TerminalTooSmall {
+            width: 60,
+            height: 20,
+            min_width: 80,
+            min_height: 24,
+        };
+        assert!(err.to_string().contains("Terminal size too small"));
+        assert!(err.to_string().contains("60x20"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+        let actions = err.recovery_actions();
+        assert!(actions.iter().any(|a| matches!(a, RecoveryAction::ManualAction(_))));
+    }
+
+    #[test]
+    fn test_terminal_capability_missing_error() {
+        let err = TuiError::TerminalCapabilityMissing {
+            capability: "color support".to_string(),
+        };
+        assert!(err.to_string().contains("capabilities insufficient"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        let actions = err.recovery_actions();
+        assert!(actions.len() > 1);
+    }
+
+    #[test]
+    fn test_terminal_restore_failed_error() {
+        let err = TuiError::TerminalRestoreFailed {
+            reason: "cleanup failed".to_string(),
+        };
+        assert!(err.to_string().contains("Failed to restore terminal"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+    }
+
+    #[test]
+    fn test_invalid_input_error() {
+        let err = TuiError::InvalidInput {
+            input: "xyz".to_string(),
+            expected: "number 1-10".to_string(),
+        };
+        assert!(err.to_string().contains("Invalid input"));
+        assert_eq!(err.category(), ErrorCategory::User);
+        let msg = err.user_message();
+        assert!(msg.contains("Invalid input"));
+    }
+
+    #[test]
+    fn test_input_buffer_full_error() {
+        let err = TuiError::InputBufferFull;
+        assert!(err.to_string().contains("Input buffer full"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        let msg = err.user_message();
+        assert!(msg.contains("busy processing"));
+    }
+
+    #[test]
+    fn test_input_timeout_error() {
+        let err = TuiError::InputTimeout { timeout_ms: 5000 };
+        assert!(err.to_string().contains("Input timeout"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Warning);
+    }
+
+    #[test]
+    fn test_unsupported_input_error() {
+        let err = TuiError::UnsupportedInput {
+            input: "F12".to_string(),
+            mode: "editor".to_string(),
+        };
+        assert!(err.to_string().contains("Unsupported input"));
+        assert_eq!(err.category(), ErrorCategory::User);
+    }
+
+    #[test]
+    fn test_rendering_failed_error() {
+        let err = TuiError::RenderingFailed {
+            component: "FileTree".to_string(),
+            reason: "buffer overflow".to_string(),
+        };
+        assert!(err.to_string().contains("Rendering failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+        let msg = err.user_message();
+        assert!(msg.contains("Display error"));
+    }
+
+    #[test]
+    fn test_layout_failed_error() {
+        let err = TuiError::LayoutFailed {
+            reason: "constraints unsatisfiable".to_string(),
+        };
+        assert!(err.to_string().contains("Layout calculation failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_component_state_corrupted_error() {
+        let err = TuiError::ComponentStateCorrupted {
+            component: "Editor".to_string(),
+            details: "cursor out of bounds".to_string(),
+        };
+        assert!(err.to_string().contains("Component state corrupted"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+    }
+
+    #[test]
+    fn test_display_buffer_overflow_error() {
+        let err = TuiError::DisplayBufferOverflow {
+            component: "Terminal".to_string(),
+            limit: 1024,
+        };
+        assert!(err.to_string().contains("Display buffer overflow"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Warning);
+    }
+
+    #[test]
+    fn test_theme_not_found_error() {
+        let err = TuiError::ThemeNotFound {
+            theme: "monokai".to_string(),
+        };
+        assert!(err.to_string().contains("Theme not found"));
+        assert_eq!(err.category(), ErrorCategory::User);
+        let actions = err.recovery_actions();
+        assert!(actions.len() > 1);
+    }
+
+    #[test]
+    fn test_theme_load_failed_error() {
+        let err = TuiError::ThemeLoadFailed {
+            theme: "custom".to_string(),
+            reason: "parse error".to_string(),
+        };
+        assert!(err.to_string().contains("Theme loading failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_invalid_color_error() {
+        let err = TuiError::InvalidColor {
+            color: "blue123".to_string(),
+        };
+        assert!(err.to_string().contains("Invalid color specification"));
+        assert_eq!(err.category(), ErrorCategory::User);
+    }
+
+    #[test]
+    fn test_style_parsing_failed_error() {
+        let err = TuiError::StyleParsingFailed {
+            style: "bold italic".to_string(),
+            reason: "unknown modifier".to_string(),
+        };
+        assert!(err.to_string().contains("Style parsing failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_component_not_found_error() {
+        let err = TuiError::ComponentNotFound {
+            component: "StatusBar".to_string(),
+        };
+        assert!(err.to_string().contains("Component not found"));
+        assert_eq!(err.category(), ErrorCategory::User);
+        let msg = err.user_message();
+        assert!(msg.contains("not available"));
+    }
+
+    #[test]
+    fn test_component_init_failed_error() {
+        let err = TuiError::ComponentInitFailed {
+            component: "Editor".to_string(),
+            reason: "no memory".to_string(),
+        };
+        assert!(err.to_string().contains("initialization failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_widget_config_invalid_error() {
+        let err = TuiError::WidgetConfigInvalid {
+            widget: "List".to_string(),
+            issue: "negative height".to_string(),
+        };
+        assert!(err.to_string().contains("configuration invalid"));
+        assert_eq!(err.category(), ErrorCategory::User);
+    }
+
+    #[test]
+    fn test_component_update_failed_error() {
+        let err = TuiError::ComponentUpdateFailed {
+            component: "FileTree".to_string(),
+            reason: "state mismatch".to_string(),
+        };
+        assert!(err.to_string().contains("update failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_app_state_corrupted_error() {
+        let err = TuiError::AppStateCorrupted {
+            component: "main".to_string(),
+        };
+        assert!(err.to_string().contains("state corrupted"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+        let msg = err.user_message();
+        assert!(msg.contains("restart"));
+    }
+
+    #[test]
+    fn test_invalid_state_transition_error() {
+        let err = TuiError::InvalidStateTransition {
+            from: "loading".to_string(),
+            to: "editing".to_string(),
+        };
+        assert!(err.to_string().contains("State transition invalid"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_state_sync_failed_error() {
+        let err = TuiError::StateSyncFailed {
+            reason: "channel closed".to_string(),
+        };
+        assert!(err.to_string().contains("synchronization failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+    }
+
+    #[test]
+    fn test_state_persistence_failed_error() {
+        let err = TuiError::StatePersistenceFailed {
+            operation: "save".to_string(),
+            reason: "disk full".to_string(),
+        };
+        assert!(err.to_string().contains("persistence failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_event_processing_failed_error() {
+        let err = TuiError::EventProcessingFailed {
+            event_type: "KeyPress".to_string(),
+            reason: "handler panicked".to_string(),
+        };
+        assert!(err.to_string().contains("Event processing failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_event_queue_overflow_error() {
+        let err = TuiError::EventQueueOverflow { pending_count: 1000 };
+        assert!(err.to_string().contains("Event queue overflow"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+        let ctx = err.debug_context();
+        assert!(ctx.is_some());
+        assert!(ctx.unwrap().contains("1000"));
+    }
+
+    #[test]
+    fn test_event_timeout_error() {
+        let err = TuiError::EventTimeout {
+            event_type: "Resize".to_string(),
+            timeout_ms: 3000,
+        };
+        assert!(err.to_string().contains("Event handling timeout"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Warning);
+    }
+
+    #[test]
+    fn test_data_formatting_failed_error() {
+        let err = TuiError::DataFormattingFailed {
+            data_type: "Json".to_string(),
+            reason: "invalid utf8".to_string(),
+        };
+        assert!(err.to_string().contains("Data formatting failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_content_too_large_error() {
+        let err = TuiError::ContentTooLarge {
+            size: 100000,
+            max_size: 50000,
+        };
+        assert!(err.to_string().contains("Content too large"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert_eq!(err.severity(), ErrorSeverity::Warning);
+        let ctx = err.debug_context();
+        assert!(ctx.is_some());
+    }
+
+    #[test]
+    fn test_pagination_failed_error() {
+        let err = TuiError::PaginationFailed {
+            page: 5,
+            total_pages: 3,
+        };
+        assert!(err.to_string().contains("Pagination failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_scrolling_failed_error() {
+        let err = TuiError::ScrollingFailed {
+            direction: "up".to_string(),
+            boundary: "top".to_string(),
+        };
+        assert!(err.to_string().contains("Scrolling failed"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_io_error() {
+        let err = TuiError::Io {
+            operation: "write".to_string(),
+            source: std::io::Error::new(std::io::ErrorKind::BrokenPipe, "pipe broken"),
+        };
+        assert!(err.to_string().contains("IO operation failed"));
+        assert_eq!(err.category(), ErrorCategory::System);
+    }
+
+    #[test]
+    fn test_generic_error() {
+        let err = TuiError::Generic {
+            message: "something went wrong".to_string(),
+            context: Some("during startup".to_string()),
+        };
+        assert!(err.to_string().contains("TUI error"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+        let ctx = err.debug_context();
+        assert!(ctx.is_some());
+    }
+
+    // Test error conversions
+    #[test]
+    fn test_io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
+        let tui_err: TuiError = io_err.into();
+        assert!(matches!(tui_err, TuiError::Io { .. }));
+    }
+
+    #[test]
+    fn test_fennec_error_conversion() {
+        let tui_err = TuiError::InputBufferFull;
+        let fennec_err: fennec_core::FennecError = tui_err.into();
+        assert!(matches!(fennec_err, fennec_core::FennecError::Tui(_)));
+    }
+
+    // Test helper functions
+    #[test]
+    fn test_helper_terminal_too_small() {
+        let err = terminal_too_small(60, 20, 80, 24);
+        assert!(matches!(err, TuiError::TerminalTooSmall { .. }));
+    }
+
+    #[test]
+    fn test_helper_invalid_input() {
+        let err = invalid_input("abc", "number");
+        assert!(matches!(err, TuiError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn test_helper_rendering_failed() {
+        let err = rendering_failed("Editor", "crash");
+        assert!(matches!(err, TuiError::RenderingFailed { .. }));
+    }
+
+    #[test]
+    fn test_helper_component_not_found() {
+        let err = component_not_found("Menu");
+        assert!(matches!(err, TuiError::ComponentNotFound { .. }));
+    }
+
+    #[test]
+    fn test_helper_theme_not_found() {
+        let err = theme_not_found("dark");
+        assert!(matches!(err, TuiError::ThemeNotFound { .. }));
+    }
+
+    // Test recovery actions
+    #[test]
+    fn test_recovery_actions_terminal_too_small() {
+        let err = TuiError::TerminalTooSmall {
+            width: 60,
+            height: 20,
+            min_width: 80,
+            min_height: 24,
+        };
+        let actions = err.recovery_actions();
+        assert!(!actions.is_empty());
+        assert!(actions.iter().any(|a| matches!(a, RecoveryAction::ManualAction(_))));
+    }
+
+    #[test]
+    fn test_recovery_actions_input_buffer_full() {
+        let err = TuiError::InputBufferFull;
+        let actions = err.recovery_actions();
+        assert!(!actions.is_empty());
+    }
+
+    #[test]
+    fn test_recovery_actions_app_state_corrupted() {
+        let err = TuiError::AppStateCorrupted {
+            component: "main".to_string(),
+        };
+        let actions = err.recovery_actions();
+        assert!(actions.len() > 1);
+        assert!(actions.iter().any(|a| matches!(a, RecoveryAction::ContactSupport(_))));
+    }
+
+    // Test user messages
+    #[test]
+    fn test_user_messages() {
+        let cases = vec![
+            (TuiError::TerminalTooSmall { width: 60, height: 20, min_width: 80, min_height: 24 }, "resize"),
+            (TuiError::InputBufferFull, "busy"),
+            (TuiError::ThemeNotFound { theme: "test".to_string() }, "Theme not found"),
+            (TuiError::AppStateCorrupted { component: "main".to_string() }, "restart"),
+        ];
+
+        for (err, expected) in cases {
+            let msg = err.user_message();
+            assert!(msg.to_lowercase().contains(&expected.to_lowercase()));
+        }
+    }
+
+    // Test debug context
+    #[test]
+    fn test_debug_context_terminal_too_small() {
+        let err = TuiError::TerminalTooSmall {
+            width: 60,
+            height: 20,
+            min_width: 80,
+            min_height: 24,
+        };
+        let ctx = err.debug_context();
+        assert!(ctx.is_some());
+        assert!(ctx.unwrap().contains("60x20"));
+    }
+
+    #[test]
+    fn test_debug_context_event_queue_overflow() {
+        let err = TuiError::EventQueueOverflow { pending_count: 500 };
+        let ctx = err.debug_context();
+        assert!(ctx.is_some());
+        assert!(ctx.unwrap().contains("500"));
+    }
+
+    // Test ErrorDisplay
+    #[test]
+    fn test_error_display_from_message() {
+        let display = ErrorDisplay::from_message(
+            "Test error".to_string(),
+            ErrorCategory::User,
+            ErrorSeverity::Warning,
+        );
+        assert_eq!(display.user_message, "Test error");
+        assert_eq!(display.category, ErrorCategory::User);
+        assert_eq!(display.severity, ErrorSeverity::Warning);
+        assert!(!display.show_details);
+    }
+
+    #[test]
+    fn test_error_display_toggle_details() {
+        let mut display = ErrorDisplay::from_message(
+            "Test".to_string(),
+            ErrorCategory::Internal,
+            ErrorSeverity::Error,
+        );
+        assert!(!display.show_details);
+        display.toggle_details();
+        assert!(display.show_details);
+        display.toggle_details();
+        assert!(!display.show_details);
+    }
+
+    #[test]
+    fn test_error_display_severity_color() {
+        let cases = vec![
+            (ErrorSeverity::Info, Color::Blue),
+            (ErrorSeverity::Warning, Color::Yellow),
+            (ErrorSeverity::Error, Color::Red),
+            (ErrorSeverity::Critical, Color::Magenta),
+        ];
+
+        for (severity, expected_color) in cases {
+            let display = ErrorDisplay::from_message(
+                "Test".to_string(),
+                ErrorCategory::Internal,
+                severity,
+            );
+            assert_eq!(display.severity_color(), expected_color);
+        }
+    }
+
+    #[test]
+    fn test_error_display_severity_icon() {
+        let cases = vec![
+            (ErrorSeverity::Info, "ℹ"),
+            (ErrorSeverity::Warning, "⚠"),
+            (ErrorSeverity::Error, "✗"),
+            (ErrorSeverity::Critical, "🔥"),
+        ];
+
+        for (severity, expected_icon) in cases {
+            let display = ErrorDisplay::from_message(
+                "Test".to_string(),
+                ErrorCategory::Internal,
+                severity,
+            );
+            assert_eq!(display.severity_icon(), expected_icon);
+        }
+    }
+
+    // Test ErrorToast
+    #[test]
+    fn test_error_toast_new() {
+        let toast = ErrorToast::new("Test message".to_string(), ErrorSeverity::Warning, 3000);
+        assert_eq!(toast.message, "Test message");
+        assert_eq!(toast.severity, ErrorSeverity::Warning);
+        assert_eq!(toast.duration_ms, 3000);
+        assert!(!toast.is_expired());
+    }
+
+    #[test]
+    fn test_error_toast_expired() {
+        let toast = ErrorToast::new("Test".to_string(), ErrorSeverity::Info, 0);
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        assert!(toast.is_expired());
+    }
+
+    #[test]
+    fn test_result_type_alias() {
+        let ok_result: Result<i32> = Ok(42);
+        assert!(ok_result.is_ok());
+        assert_eq!(ok_result.unwrap(), 42);
+
+        let err_result: Result<i32> = Err(TuiError::InputBufferFull);
+        assert!(err_result.is_err());
+    }
+}

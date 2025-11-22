@@ -1,0 +1,16 @@
+{
+  "name": "fennec-local",
+  "description": "Local Fennec project plugins",
+  "version": "1.0.0",
+  "plugins": {
+    "rust-best-practices": {
+      "name": "Rust Best Practices",
+      "description": "Comprehensive Rust best practices and code quality guidelines",
+      "version": "1.0.0",
+      "source": {
+        "type": "directory",
+        "path": "../rust-best-practices-plugin"
+      }
+    }
+  }
+}

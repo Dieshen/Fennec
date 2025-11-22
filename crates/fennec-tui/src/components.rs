@@ -693,6 +693,8 @@ impl PopupDialog {
     }
 }
 
+// FileTreeBrowser moved to file_tree.rs for better modularity
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -34,6 +34,7 @@ pub struct CommandContext {
     pub dry_run: bool,
     pub preview_only: bool,
     pub cancellation_token: tokio_util::sync::CancellationToken,
+    pub action_log: Option<std::sync::Arc<crate::action_log::ActionLog>>,
 }
 
 /// Result of command execution including metadata
@@ -371,6 +372,7 @@ mod tests {
             dry_run: false,
             preview_only: false,
             cancellation_token: CancellationToken::new(),
+            action_log: None,
         };
 
         let result = registry

@@ -10,5 +10,16 @@
     "deny": [],
     "ask": []
   },
-  "outputStyle": "Expert Engineer"
+  "outputStyle": "Expert Engineer",
+  "extraKnownMarketplaces": {
+    "fennec-local": {
+      "source": {
+        "source": "directory",
+        "path": ".claude/marketplace"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "rust-best-practices@fennec-local": true
+  }
 }

@@ -540,3 +540,316 @@ pub fn service_unavailable(provider: &str, reason: &str) -> ProviderError {
         reason: reason.to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test error variants
+    #[test]
+    fn test_api_key_invalid_error() {
+        let err = ProviderError::ApiKeyInvalid {
+            provider: "OpenAI".to_string(),
+        };
+        assert!(err.to_string().contains("API key invalid"));
+        assert_eq!(err.category(), ErrorCategory::Security);
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn test_api_key_expired_error() {
+        let err = ProviderError::ApiKeyExpired {
+            provider: "OpenAI".to_string(),
+        };
+        assert!(err.to_string().contains("API key expired"));
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+    }
+
+    #[test]
+    fn test_rate_limit_error() {
+        let err = ProviderError::RateLimit {
+            provider: "OpenAI".to_string(),
+            message: "too many requests".to_string(),
+            retry_after: 60,
+            daily_limit: Some(1000),
+            current_usage: Some(1000),
+        };
+        assert!(err.to_string().contains("Rate limit exceeded"));
+        assert!(err.is_retryable());
+        assert_eq!(err.retry_after(), Some(60));
+        assert!(err.should_exponential_backoff());
+        assert!(err.debug_context().unwrap().contains("Usage"));
+    }
+
+    #[test]
+    fn test_quota_exceeded_error() {
+        let err = ProviderError::QuotaExceeded {
+            provider: "OpenAI".to_string(),
+            used: 1000000,
+            limit: 100000,
+            reset_date: "2025-02-01".to_string(),
+        };
+        assert!(err.to_string().contains("quota exceeded"));
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+    }
+
+    #[test]
+    fn test_token_limit_error() {
+        let err = ProviderError::TokenLimit {
+            used: 5000,
+            limit: 4000,
+            suggestion: "reduce input".to_string(),
+        };
+        assert!(err.to_string().contains("Token limit exceeded"));
+        assert!(err.debug_context().unwrap().contains("Tokens:"));
+    }
+
+    #[test]
+    fn test_model_not_found_error() {
+        let err = ProviderError::ModelNotFound {
+            model: "gpt-5".to_string(),
+        };
+        assert!(err.to_string().contains("not found"));
+        assert_eq!(err.category(), ErrorCategory::User);
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+    }
+
+    #[test]
+    fn test_timeout_error() {
+        let err = ProviderError::Timeout {
+            operation: "chat completion".to_string(),
+            timeout_ms: 30000,
+        };
+        assert!(err.to_string().contains("timeout"));
+        assert!(err.is_retryable());
+        assert_eq!(err.severity(), ErrorSeverity::Warning);
+    }
+
+    #[test]
+    fn test_server_error_retryable() {
+        let err = ProviderError::ServerError {
+            provider: "OpenAI".to_string(),
+            status_code: 503,
+            message: "service unavailable".to_string(),
+            is_temporary: true,
+        };
+        assert!(err.is_retryable());
+        assert_eq!(err.retry_after(), Some(1));
+        assert!(err.should_exponential_backoff());
+        assert!(err.debug_context().unwrap().contains("Status:"));
+    }
+
+    #[test]
+    fn test_server_error_not_retryable() {
+        let err = ProviderError::ServerError {
+            provider: "OpenAI".to_string(),
+            status_code: 400,
+            message: "bad request".to_string(),
+            is_temporary: false,
+        };
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn test_service_unavailable_error() {
+        let err = ProviderError::ServiceUnavailable {
+            provider: "OpenAI".to_string(),
+            reason: "maintenance".to_string(),
+        };
+        assert!(err.is_retryable());
+        assert_eq!(err.retry_after(), Some(30));
+        assert_eq!(err.severity(), ErrorSeverity::Warning);
+    }
+
+    #[test]
+    fn test_connection_failed_error() {
+        let err = ProviderError::ConnectionFailed {
+            endpoint: "https://api.openai.com".to_string(),
+            reason: "connection refused".to_string(),
+        };
+        assert!(err.is_retryable());
+        assert_eq!(err.category(), ErrorCategory::Network);
+    }
+
+    #[test]
+    fn test_authentication_failed_error() {
+        let err = ProviderError::AuthenticationFailed {
+            provider: "OpenAI".to_string(),
+            reason: "invalid credentials".to_string(),
+        };
+        assert_eq!(err.category(), ErrorCategory::Security);
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+    }
+
+    #[test]
+    fn test_model_capability_unsupported_error() {
+        let err = ProviderError::ModelCapabilityUnsupported {
+            model: "gpt-3".to_string(),
+            capability: "function calling".to_string(),
+        };
+        assert!(err.to_string().contains("does not support capability"));
+        assert_eq!(err.category(), ErrorCategory::User);
+    }
+
+    #[test]
+    fn test_invalid_request_error() {
+        let err = ProviderError::InvalidRequest {
+            field: "temperature".to_string(),
+            issue: "must be between 0 and 2".to_string(),
+        };
+        assert!(err.to_string().contains("Invalid request"));
+        assert_eq!(err.category(), ErrorCategory::User);
+    }
+
+    #[test]
+    fn test_stream_error() {
+        let err = ProviderError::StreamError {
+            operation: "receiving chunks".to_string(),
+            reason: "connection closed".to_string(),
+        };
+        assert!(err.is_retryable());
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_incomplete_response_error() {
+        let err = ProviderError::IncompleteResponse {
+            received: 500,
+            expected: 1000,
+        };
+        assert!(err.is_retryable());
+        assert_eq!(err.severity(), ErrorSeverity::Warning);
+    }
+
+    #[test]
+    fn test_content_filtered_error() {
+        let err = ProviderError::ContentFiltered {
+            reason: "unsafe content detected".to_string(),
+        };
+        assert_eq!(err.category(), ErrorCategory::Security);
+    }
+
+    #[test]
+    fn test_configuration_missing_error() {
+        let err = ProviderError::ConfigurationMissing {
+            provider: "OpenAI".to_string(),
+        };
+        assert!(err.to_string().contains("configuration missing"));
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+    }
+
+    // Test error conversions
+    #[test]
+    fn test_json_error_conversion() {
+        let json_str = "{ invalid json";
+        let json_err = serde_json::from_str::<serde_json::Value>(json_str).unwrap_err();
+        let provider_err: ProviderError = json_err.into();
+        assert!(matches!(provider_err, ProviderError::Json { .. }));
+        assert_eq!(provider_err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_fennec_error_conversion() {
+        let provider_err = ProviderError::ApiKeyInvalid {
+            provider: "test".to_string(),
+        };
+        let fennec_err: fennec_core::FennecError = provider_err.into();
+        assert!(matches!(fennec_err, fennec_core::FennecError::Provider(_)));
+    }
+
+    // Test helper functions
+    #[test]
+    fn test_helper_api_key_invalid() {
+        let err = api_key_invalid("OpenAI");
+        assert!(matches!(err, ProviderError::ApiKeyInvalid { .. }));
+    }
+
+    #[test]
+    fn test_helper_rate_limit_exceeded() {
+        let err = rate_limit_exceeded("OpenAI", "too many requests", 60);
+        assert!(matches!(err, ProviderError::RateLimit { .. }));
+    }
+
+    #[test]
+    fn test_helper_model_not_found() {
+        let err = model_not_found("gpt-5");
+        assert!(matches!(err, ProviderError::ModelNotFound { .. }));
+    }
+
+    #[test]
+    fn test_helper_token_limit_exceeded() {
+        let err = token_limit_exceeded(5000, 4000, "reduce input");
+        assert!(matches!(err, ProviderError::TokenLimit { .. }));
+    }
+
+    #[test]
+    fn test_helper_service_unavailable() {
+        let err = service_unavailable("OpenAI", "maintenance");
+        assert!(matches!(err, ProviderError::ServiceUnavailable { .. }));
+    }
+
+    // Test recovery actions
+    #[test]
+    fn test_recovery_actions_api_key_invalid() {
+        let err = ProviderError::ApiKeyInvalid {
+            provider: "OpenAI".to_string(),
+        };
+        let actions = err.recovery_actions();
+        assert!(!actions.is_empty());
+    }
+
+    #[test]
+    fn test_recovery_actions_rate_limit() {
+        let err = ProviderError::RateLimit {
+            provider: "OpenAI".to_string(),
+            message: "too many requests".to_string(),
+            retry_after: 60,
+            daily_limit: None,
+            current_usage: None,
+        };
+        let actions = err.recovery_actions();
+        assert!(!actions.is_empty());
+    }
+
+    // Test user messages
+    #[test]
+    fn test_user_messages() {
+        let errors = vec![
+            ProviderError::ApiKeyInvalid {
+                provider: "OpenAI".to_string(),
+            },
+            ProviderError::RateLimit {
+                provider: "OpenAI".to_string(),
+                message: "limit".to_string(),
+                retry_after: 60,
+                daily_limit: None,
+                current_usage: None,
+            },
+            ProviderError::ModelNotFound {
+                model: "gpt-5".to_string(),
+            },
+            ProviderError::Timeout {
+                operation: "request".to_string(),
+                timeout_ms: 30000,
+            },
+        ];
+
+        for err in errors {
+            let msg = err.user_message();
+            assert!(!msg.is_empty());
+        }
+    }
+
+    // Test Result type alias
+    #[test]
+    fn test_result_type_alias() {
+        let ok_result: Result<String> = Ok("success".to_string());
+        assert!(ok_result.is_ok());
+
+        let err_result: Result<String> = Err(ProviderError::ApiKeyInvalid {
+            provider: "test".to_string(),
+        });
+        assert!(err_result.is_err());
+    }
+}

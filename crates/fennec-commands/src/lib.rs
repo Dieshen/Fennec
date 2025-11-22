@@ -1,36 +1,78 @@
+pub mod action_log;
+pub mod commit_template;
 pub mod common;
+pub mod compiler_errors;
+pub mod create;
+pub mod delete;
+pub mod dependency_graph;
 pub mod diff;
 pub mod edit;
 pub mod error;
 pub mod file_ops;
+pub mod find_symbol;
+pub mod fix_errors;
+pub mod git_integration;
+pub mod history;
+pub mod hunks;
+pub mod index;
 pub mod plan;
+pub mod pr_summary;
+pub mod project_index;
+pub mod quick_actions;
+pub mod redo;
 pub mod registry;
+pub mod rename;
 pub mod run;
+pub mod search;
+pub mod symbols;
 pub mod summarize;
 pub mod summarize_enhanced;
+pub mod test_watch;
+pub mod undo;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export key types and functions for easy use
+pub use action_log::{Action, ActionLog, ActionState};
 pub use common::{format_file_size, initialize_builtin_commands, is_text_file, truncate_text};
 pub use error::{CommandError, Result as CommandResult};
+pub use hunks::{apply_hunks, split_diff_into_hunks, Hunk, HunkStatus};
 pub use registry::{
     CommandContext, CommandDescriptor, CommandExecutionResult, CommandExecutor, CommandRegistry,
 };
 
 // Re-export individual commands
+pub use commit_template::{CommitTemplateArgs, CommitTemplateCommand};
+pub use compiler_errors::{CompilerMessage, FixConfidence, MessageLevel, SuggestedFix};
+pub use create::{CreateArgs, CreateCommand};
+pub use delete::{DeleteArgs, DeleteCommand};
+pub use dependency_graph::{CargoPackage, Dependency, DependencyGraph};
 pub use diff::{DiffArgs, DiffCommand};
 pub use edit::{EditArgs, EditCommand};
 pub use file_ops::{
     EditStrategy, FileEditRequest, FileEditResult, FileOperations, FileOperationsConfig,
 };
+pub use find_symbol::{FindSymbolArgs, FindSymbolCommand};
+pub use fix_errors::{FixErrorsArgs, FixErrorsCommand};
+pub use git_integration::{ChangeType, FileChange, GitCommit};
+pub use history::{HistoryArgs, HistoryCommand};
+pub use index::{IndexArgs, IndexCommand};
 pub use plan::{PlanArgs, PlanCommand};
+pub use pr_summary::{PrSummaryArgs, PrSummaryCommand};
+pub use project_index::{ImpactAnalysis, ProjectIndex, ProjectStatistics};
+pub use quick_actions::{QuickAction, QuickActionArgs, QuickActionCommand};
+pub use redo::{RedoArgs, RedoCommand};
+pub use rename::{RenameArgs, RenameCommand};
 pub use run::{RunArgs, RunCommand};
+pub use search::{SearchArgs, SearchCommand, SearchResult};
 pub use summarize::{SummarizeArgs, SummarizeCommand};
 pub use summarize_enhanced::{
     EnhancedSummarizeArgs, EnhancedSummarizeCommand, OutputDestination, SummaryDepth, SummaryType,
 };
+pub use symbols::{Symbol, SymbolIndex, SymbolType, Visibility as SymbolVisibility};
+pub use test_watch::{TestWatchArgs, TestWatchCommand};
+pub use undo::{UndoArgs, UndoCommand};
 
 /// Create a fully initialized command registry with all built-in commands
 ///
@@ -63,6 +105,7 @@ pub use summarize_enhanced::{
 ///         dry_run: false,
 ///         preview_only: false,
 ///         cancellation_token: CancellationToken::new(),
+///         action_log: None,
 ///     };
 ///     
 ///     let args = serde_json::json!({

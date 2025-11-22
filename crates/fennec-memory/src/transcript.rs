@@ -964,6 +964,275 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    // Data structure tests
+
+    #[test]
+    fn test_segment_type_values() {
+        let _ = SegmentType::Planning;
+        let _ = SegmentType::Implementation;
+        let _ = SegmentType::Debugging;
+        let _ = SegmentType::Learning;
+        let _ = SegmentType::Review;
+        let _ = SegmentType::General;
+    }
+
+    #[test]
+    fn test_segment_type_equality() {
+        assert_eq!(SegmentType::Planning, SegmentType::Planning);
+        assert_ne!(SegmentType::Planning, SegmentType::Implementation);
+    }
+
+    #[test]
+    fn test_segment_type_serialization() {
+        let segment_type = SegmentType::Implementation;
+        let json = serde_json::to_string(&segment_type).unwrap();
+        let deserialized: SegmentType = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, segment_type);
+    }
+
+    #[test]
+    fn test_conversation_context_default() {
+        let context = ConversationContext::default();
+        assert!(context.user_intent.is_none());
+        assert!(context.ai_response_summary.is_none());
+        assert!(context.technologies_mentioned.is_empty());
+        assert!(context.decisions_made.is_empty());
+    }
+
+    #[test]
+    fn test_conversation_context_serialization() {
+        let mut context = ConversationContext::default();
+        context.user_intent = Some("Implement feature".to_string());
+        context.technologies_mentioned = vec!["rust".to_string()];
+
+        let json = serde_json::to_string(&context).unwrap();
+        let deserialized: ConversationContext = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.user_intent, context.user_intent);
+        assert_eq!(deserialized.technologies_mentioned.len(), 1);
+    }
+
+    #[test]
+    fn test_transcript_metadata_creation() {
+        let session_id = Uuid::new_v4();
+        let now = chrono::Utc::now();
+
+        let metadata = TranscriptMetadata {
+            session_id,
+            created_at: now,
+            updated_at: now,
+            message_count: 10,
+            estimated_tokens: 500,
+            is_active: true,
+        };
+
+        assert_eq!(metadata.session_id, session_id);
+        assert_eq!(metadata.message_count, 10);
+        assert_eq!(metadata.estimated_tokens, 500);
+        assert!(metadata.is_active);
+    }
+
+    #[test]
+    fn test_execution_result_creation() {
+        let result = ExecutionResult {
+            success: true,
+            summary: "Command executed".to_string(),
+            details: Some("Details here".to_string()),
+            files_affected: vec!["file1.txt".to_string()],
+            follow_up_actions: vec!["Review changes".to_string()],
+        };
+
+        assert!(result.success);
+        assert_eq!(result.summary, "Command executed");
+        assert_eq!(result.files_affected.len(), 1);
+        assert_eq!(result.follow_up_actions.len(), 1);
+    }
+
+    #[test]
+    fn test_execution_result_serialization() {
+        let result = ExecutionResult {
+            success: false,
+            summary: "Failed".to_string(),
+            details: None,
+            files_affected: vec![],
+            follow_up_actions: vec![],
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        let deserialized: ExecutionResult = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.success, result.success);
+        assert_eq!(deserialized.summary, result.summary);
+    }
+
+    #[test]
+    fn test_command_execution_creation() {
+        let execution = CommandExecution {
+            id: Uuid::new_v4(),
+            command: "cargo build".to_string(),
+            timestamp: chrono::Utc::now(),
+            result: ExecutionResult {
+                success: true,
+                summary: "Build successful".to_string(),
+                details: None,
+                files_affected: vec![],
+                follow_up_actions: vec![],
+            },
+            output: Some("Compiling...".to_string()),
+            error: None,
+            duration: Some(Duration::from_secs(10)),
+            exit_code: Some(0),
+            working_directory: Some("/tmp".to_string()),
+            environment: HashMap::new(),
+            triggered_by_message: None,
+        };
+
+        assert_eq!(execution.command, "cargo build");
+        assert!(execution.result.success);
+        assert_eq!(execution.exit_code, Some(0));
+    }
+
+    #[test]
+    fn test_transcript_segment_creation() {
+        let segment = TranscriptSegment {
+            id: Uuid::new_v4(),
+            start_message_id: Uuid::new_v4(),
+            end_message_id: None,
+            title: "Planning Phase".to_string(),
+            summary: "Initial planning".to_string(),
+            context: ConversationContext::default(),
+            key_outcomes: vec!["Decided on approach".to_string()],
+            segment_type: SegmentType::Planning,
+            created_at: chrono::Utc::now(),
+            estimated_tokens: 250,
+        };
+
+        assert_eq!(segment.title, "Planning Phase");
+        assert_eq!(segment.segment_type, SegmentType::Planning);
+        assert!(segment.end_message_id.is_none());
+        assert_eq!(segment.key_outcomes.len(), 1);
+    }
+
+    #[test]
+    fn test_transcript_search_filters_default() {
+        let filters = TranscriptSearchFilters::default();
+        assert!(filters.session_id.is_none());
+        assert!(filters.date_range.is_none());
+        assert!(!filters.active_only);
+        assert!(filters.limit.is_none());
+    }
+
+    #[test]
+    fn test_transcript_search_filters_custom() {
+        let session_id = Uuid::new_v4();
+        let filters = TranscriptSearchFilters {
+            session_id: Some(session_id),
+            date_range: None,
+            technologies: Some(vec!["rust".to_string()]),
+            segment_type: Some(SegmentType::Implementation),
+            active_only: true,
+            limit: Some(10),
+        };
+
+        assert_eq!(filters.session_id, Some(session_id));
+        assert!(filters.active_only);
+        assert_eq!(filters.limit, Some(10));
+    }
+
+    #[test]
+    fn test_conversation_context_update_default() {
+        let update = ConversationContextUpdate::default();
+        assert!(update.user_intent.is_none());
+        assert!(update.technologies_mentioned.is_empty());
+        assert!(update.decisions_made.is_empty());
+    }
+
+    #[test]
+    fn test_conversation_context_update_custom() {
+        let update = ConversationContextUpdate {
+            user_intent: Some("Build feature".to_string()),
+            ai_response_summary: Some("Provided guidance".to_string()),
+            technologies_mentioned: vec!["rust".to_string(), "tokio".to_string()],
+            decisions_made: vec!["Use async".to_string()],
+            problems_encountered: vec![],
+            solutions_found: vec![],
+            insights: vec![],
+            project_context: None,
+            files_mentioned: vec![],
+        };
+
+        assert_eq!(update.user_intent, Some("Build feature".to_string()));
+        assert_eq!(update.technologies_mentioned.len(), 2);
+    }
+
+    #[test]
+    fn test_timeline_event_creation() {
+        let event = TimelineEvent {
+            timestamp: chrono::Utc::now(),
+            event_type: TimelineEventType::Message {
+                role: MessageRole::User,
+                content_preview: "Hello".to_string(),
+            },
+        };
+
+        match event.event_type {
+            TimelineEventType::Message { role, content_preview } => {
+                assert!(matches!(role, MessageRole::User));
+                assert_eq!(content_preview, "Hello");
+            }
+            _ => panic!("Wrong event type"),
+        }
+    }
+
+    #[test]
+    fn test_timeline_event_type_command_execution() {
+        let event_type = TimelineEventType::CommandExecution {
+            command: "cargo test".to_string(),
+            success: true,
+            duration: Some(Duration::from_secs(5)),
+        };
+
+        match event_type {
+            TimelineEventType::CommandExecution { command, success, duration } => {
+                assert_eq!(command, "cargo test");
+                assert!(success);
+                assert_eq!(duration, Some(Duration::from_secs(5)));
+            }
+            _ => panic!("Wrong event type"),
+        }
+    }
+
+    #[test]
+    fn test_timeline_event_type_segment_start() {
+        let event_type = TimelineEventType::SegmentStart {
+            title: "Implementation".to_string(),
+            segment_type: SegmentType::Implementation,
+        };
+
+        match event_type {
+            TimelineEventType::SegmentStart { title, segment_type } => {
+                assert_eq!(title, "Implementation");
+                assert_eq!(segment_type, SegmentType::Implementation);
+            }
+            _ => panic!("Wrong event type"),
+        }
+    }
+
+    // TranscriptStore tests
+
+    #[tokio::test]
+    async fn test_transcript_store_new() {
+        let store = TranscriptStore::new();
+        assert!(store.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_transcript_store_default() {
+        let store = TranscriptStore::default();
+        assert_eq!(store.max_cache_size, 100);
+        assert_eq!(store.cache.len(), 0);
+    }
+
     #[tokio::test]
     async fn test_store_and_load_transcript() {
         let temp_dir = TempDir::new().unwrap();
@@ -1010,6 +1279,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_load_nonexistent_transcript() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        let loaded = store.load_transcript(session_id).await.unwrap();
+        assert!(loaded.is_none());
+    }
+
+    #[tokio::test]
     async fn test_add_message() {
         let temp_dir = TempDir::new().unwrap();
         let storage_dir = temp_dir.path().to_owned();
@@ -1032,5 +1317,571 @@ mod tests {
         let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
         assert_eq!(transcript.transcript.messages.len(), 1);
         assert_eq!(transcript.transcript.messages[0].content, "Hello");
+    }
+
+    #[tokio::test]
+    async fn test_add_multiple_messages() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+
+        // Add multiple messages
+        store
+            .add_message(session_id, MessageRole::User, "Hello".to_string())
+            .await
+            .unwrap();
+        store
+            .add_message(session_id, MessageRole::Assistant, "Hi there!".to_string())
+            .await
+            .unwrap();
+        store
+            .add_message(session_id, MessageRole::User, "How are you?".to_string())
+            .await
+            .unwrap();
+
+        // Load and verify
+        let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
+        assert_eq!(transcript.transcript.messages.len(), 3);
+        assert_eq!(transcript.metadata.message_count, 3);
+        assert!(transcript.metadata.estimated_tokens > 0);
+    }
+
+    #[tokio::test]
+    async fn test_delete_transcript() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        store
+            .add_message(session_id, MessageRole::User, "Test".to_string())
+            .await
+            .unwrap();
+
+        // Verify it exists
+        assert!(store.load_transcript(session_id).await.unwrap().is_some());
+
+        // Delete it
+        store.delete_transcript(session_id).await.unwrap();
+
+        // Verify it's gone
+        assert!(store.load_transcript(session_id).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_add_tags() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        store
+            .add_message(session_id, MessageRole::User, "Test".to_string())
+            .await
+            .unwrap();
+
+        // Add tags
+        store
+            .add_tags(session_id, vec!["tag1".to_string(), "tag2".to_string()])
+            .await
+            .unwrap();
+
+        // Verify
+        let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
+        assert_eq!(transcript.tags.len(), 2);
+        assert!(transcript.tags.contains(&"tag1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_add_duplicate_tags() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        store
+            .add_message(session_id, MessageRole::User, "Test".to_string())
+            .await
+            .unwrap();
+
+        // Add tags twice
+        store
+            .add_tags(session_id, vec!["tag1".to_string()])
+            .await
+            .unwrap();
+        store
+            .add_tags(session_id, vec!["tag1".to_string(), "tag2".to_string()])
+            .await
+            .unwrap();
+
+        // Verify no duplicates
+        let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
+        assert_eq!(transcript.tags.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_set_summary() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        store
+            .add_message(session_id, MessageRole::User, "Test".to_string())
+            .await
+            .unwrap();
+
+        // Set summary
+        store
+            .set_summary(session_id, "This is a summary".to_string())
+            .await
+            .unwrap();
+
+        // Verify
+        let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
+        assert_eq!(transcript.summary, Some("This is a summary".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_cache_hit() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        store
+            .add_message(session_id, MessageRole::User, "Test".to_string())
+            .await
+            .unwrap();
+
+        // First load - from disk
+        let transcript1 = store.load_transcript(session_id).await.unwrap().unwrap();
+
+        // Second load - from cache (should be faster)
+        let transcript2 = store.load_transcript(session_id).await.unwrap().unwrap();
+
+        assert_eq!(transcript1.metadata.session_id, transcript2.metadata.session_id);
+    }
+
+    #[tokio::test]
+    async fn test_cache_eviction() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 2, // Small cache size
+        };
+
+        // Add 3 transcripts - should evict oldest
+        let session_id1 = Uuid::new_v4();
+        let session_id2 = Uuid::new_v4();
+        let session_id3 = Uuid::new_v4();
+
+        store
+            .add_message(session_id1, MessageRole::User, "Test1".to_string())
+            .await
+            .unwrap();
+
+        // Sleep to ensure different timestamps
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        store
+            .add_message(session_id2, MessageRole::User, "Test2".to_string())
+            .await
+            .unwrap();
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        store
+            .add_message(session_id3, MessageRole::User, "Test3".to_string())
+            .await
+            .unwrap();
+
+        // Cache should have at most 2 items
+        assert!(store.cache.len() <= 2);
+    }
+
+    #[tokio::test]
+    async fn test_estimate_tokens() {
+        let session_id = Uuid::new_v4();
+        let mut transcript = Transcript::new(session_id);
+
+        // Add a message with 100 characters (should be ~25 tokens)
+        transcript.add_message(MessageRole::User, "a".repeat(100));
+
+        let estimated = TranscriptStore::estimate_tokens(&transcript);
+        assert_eq!(estimated, 25); // 100 / 4
+    }
+
+    #[tokio::test]
+    async fn test_update_transcript() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        let mut transcript = Transcript::new(session_id);
+        transcript.add_message(MessageRole::User, "Hello".to_string());
+
+        // Store initial
+        store.update_transcript(session_id, transcript.clone()).await.unwrap();
+
+        // Update with new message
+        transcript.add_message(MessageRole::Assistant, "Hi!".to_string());
+        store.update_transcript(session_id, transcript).await.unwrap();
+
+        // Verify
+        let loaded = store.load_transcript(session_id).await.unwrap().unwrap();
+        assert_eq!(loaded.transcript.messages.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_list_transcripts() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        // Add multiple transcripts
+        let session_id1 = Uuid::new_v4();
+        let session_id2 = Uuid::new_v4();
+
+        store
+            .add_message(session_id1, MessageRole::User, "Test1".to_string())
+            .await
+            .unwrap();
+
+        store
+            .add_message(session_id2, MessageRole::User, "Test2".to_string())
+            .await
+            .unwrap();
+
+        // List them
+        let list = store.list_transcripts().await.unwrap();
+        assert_eq!(list.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_search_transcripts() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        store
+            .add_message(session_id, MessageRole::User, "Hello world from rust".to_string())
+            .await
+            .unwrap();
+
+        // Search for "rust"
+        let results = store.search_transcripts("rust", None).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].session_id, session_id);
+    }
+
+    #[tokio::test]
+    async fn test_search_transcripts_with_limit() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        // Add multiple matching transcripts
+        for _ in 0..5 {
+            let session_id = Uuid::new_v4();
+            store
+                .add_message(session_id, MessageRole::User, "rust programming".to_string())
+                .await
+                .unwrap();
+        }
+
+        // Search with limit
+        let results = store.search_transcripts("rust", Some(3)).await.unwrap();
+        assert_eq!(results.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_add_command_execution() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        store
+            .add_message(session_id, MessageRole::User, "Test".to_string())
+            .await
+            .unwrap();
+
+        // Add command execution
+        let execution_id = store
+            .add_command_execution(
+                session_id,
+                "cargo build".to_string(),
+                ExecutionResult {
+                    success: true,
+                    summary: "Built successfully".to_string(),
+                    details: None,
+                    files_affected: vec![],
+                    follow_up_actions: vec![],
+                },
+                Some("Compiling...".to_string()),
+                None,
+                Some(Duration::from_secs(10)),
+                Some(0),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Verify
+        let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
+        assert_eq!(transcript.command_executions.len(), 1);
+        assert_eq!(transcript.command_executions[0].id, execution_id);
+        assert_eq!(transcript.command_executions[0].command, "cargo build");
+    }
+
+    #[tokio::test]
+    async fn test_update_conversation_context() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        store
+            .add_message(session_id, MessageRole::User, "Test".to_string())
+            .await
+            .unwrap();
+
+        // Update context
+        let update = ConversationContextUpdate {
+            user_intent: Some("Build feature".to_string()),
+            technologies_mentioned: vec!["rust".to_string()],
+            ..Default::default()
+        };
+
+        store.update_conversation_context(session_id, update).await.unwrap();
+
+        // Verify
+        let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
+        assert_eq!(
+            transcript.conversation_context.user_intent,
+            Some("Build feature".to_string())
+        );
+        assert_eq!(transcript.conversation_context.technologies_mentioned.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_segment() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+        let message_id = Uuid::new_v4();
+
+        store
+            .add_message(session_id, MessageRole::User, "Test".to_string())
+            .await
+            .unwrap();
+
+        // Create segment
+        let segment_id = store
+            .create_segment(
+                session_id,
+                message_id,
+                "Planning".to_string(),
+                SegmentType::Planning,
+            )
+            .await
+            .unwrap();
+
+        // Verify
+        let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
+        assert_eq!(transcript.segments.len(), 1);
+        assert_eq!(transcript.segments[0].id, segment_id);
+        assert_eq!(transcript.segments[0].title, "Planning");
+    }
+
+    #[tokio::test]
+    async fn test_end_segment() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+
+        // Add messages first
+        store
+            .add_message(session_id, MessageRole::User, "Test1".to_string())
+            .await
+            .unwrap();
+
+        store
+            .add_message(session_id, MessageRole::Assistant, "Test2".to_string())
+            .await
+            .unwrap();
+
+        // Get actual message IDs from the transcript
+        let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
+        let start_message_id = transcript.transcript.messages[0].id;
+        let end_message_id = transcript.transcript.messages[1].id;
+
+        // Create and end segment
+        let segment_id = store
+            .create_segment(
+                session_id,
+                start_message_id,
+                "Planning".to_string(),
+                SegmentType::Planning,
+            )
+            .await
+            .unwrap();
+
+        store
+            .end_segment(
+                session_id,
+                segment_id,
+                end_message_id,
+                "Completed planning".to_string(),
+                vec!["Decided approach".to_string()],
+            )
+            .await
+            .unwrap();
+
+        // Verify
+        let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
+        let segment = &transcript.segments[0];
+        assert_eq!(segment.end_message_id, Some(end_message_id));
+        assert_eq!(segment.summary, "Completed planning");
+        assert_eq!(segment.key_outcomes.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_session_timeline() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_owned();
+
+        let mut store = TranscriptStore {
+            storage_dir,
+            cache: HashMap::new(),
+            max_cache_size: 100,
+        };
+
+        let session_id = Uuid::new_v4();
+
+        // Add messages
+        store
+            .add_message(session_id, MessageRole::User, "Hello".to_string())
+            .await
+            .unwrap();
+
+        store
+            .add_message(session_id, MessageRole::Assistant, "Hi!".to_string())
+            .await
+            .unwrap();
+
+        // Get timeline
+        let timeline = store.get_session_timeline(session_id).await.unwrap();
+        assert_eq!(timeline.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_memory_transcript_serialization() {
+        let session_id = Uuid::new_v4();
+        let transcript = MemoryTranscript {
+            transcript: Transcript::new(session_id),
+            tags: vec!["test".to_string()],
+            summary: Some("Summary".to_string()),
+            topics: vec!["topic1".to_string()],
+            metadata: TranscriptMetadata {
+                session_id,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                message_count: 0,
+                estimated_tokens: 0,
+                is_active: true,
+            },
+            conversation_context: ConversationContext::default(),
+            command_executions: Vec::new(),
+            segments: Vec::new(),
+        };
+
+        let json = serde_json::to_string(&transcript).unwrap();
+        let deserialized: MemoryTranscript = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.metadata.session_id, session_id);
+        assert_eq!(deserialized.tags, vec!["test"]);
     }
 }

@@ -517,3 +517,396 @@ pub fn execution_failed(reason: &str, command: &str, exit_code: Option<i32>) -> 
         exit_code,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_invalid_argument_error() {
+        let err = CommandError::InvalidArgument {
+            arg: "depth".to_string(),
+            reason: "must be a number".to_string(),
+            expected: "1-10".to_string(),
+        };
+        assert!(err.to_string().contains("Invalid argument"));
+        assert!(err.to_string().contains("depth"));
+        assert_eq!(err.category(), ErrorCategory::User);
+        assert_eq!(err.severity(), ErrorSeverity::Error);
+    }
+
+    #[test]
+    fn test_missing_argument_error() {
+        let err = CommandError::MissingArgument {
+            arg: "file".to_string(),
+            description: "path to file".to_string(),
+        };
+        assert!(err.to_string().contains("Missing required argument"));
+        assert!(err.user_message().contains("Missing required argument"));
+    }
+
+    #[test]
+    fn test_invalid_argument_combination_error() {
+        let err = CommandError::InvalidArgumentCombination {
+            args: "--all and --file".to_string(),
+            suggestion: "use only one".to_string(),
+        };
+        assert!(err.to_string().contains("Invalid argument combination"));
+    }
+
+    #[test]
+    fn test_argument_out_of_range_error() {
+        let err = CommandError::ArgumentOutOfRange {
+            arg: "depth".to_string(),
+            value: "100".to_string(),
+            min: "1".to_string(),
+            max: "10".to_string(),
+        };
+        assert!(err.to_string().contains("out of range"));
+    }
+
+    #[test]
+    fn test_execution_failed_error() {
+        let err = CommandError::ExecutionFailed {
+            reason: "command not found".to_string(),
+            command: "test".to_string(),
+            exit_code: Some(127),
+        };
+        assert!(err.to_string().contains("execution failed"));
+        assert_eq!(err.category(), ErrorCategory::System);
+        assert!(err.debug_context().unwrap().contains("Exit code"));
+    }
+
+    #[test]
+    fn test_timeout_error() {
+        let err = CommandError::Timeout {
+            timeout_ms: 5000,
+            command: "long-running".to_string(),
+        };
+        assert!(err.to_string().contains("timed out"));
+        assert!(err.to_string().contains("5000"));
+        assert_eq!(err.severity(), ErrorSeverity::Warning);
+    }
+
+    #[test]
+    fn test_cancelled_error() {
+        let err = CommandError::Cancelled {
+            command: "edit".to_string(),
+            reason: "user aborted".to_string(),
+        };
+        assert!(err.to_string().contains("cancelled"));
+        assert_eq!(err.severity(), ErrorSeverity::Info);
+    }
+
+    #[test]
+    fn test_preview_failed_error() {
+        let err = CommandError::PreviewFailed {
+            reason: "file too large".to_string(),
+            command: "diff".to_string(),
+        };
+        assert!(err.to_string().contains("Preview generation failed"));
+    }
+
+    #[test]
+    fn test_file_not_found_error() {
+        let err = CommandError::FileNotFound {
+            path: "/path/to/file.rs".to_string(),
+            operation: "read".to_string(),
+        };
+        assert!(err.to_string().contains("File not found"));
+        assert_eq!(err.category(), ErrorCategory::User);
+    }
+
+    #[test]
+    fn test_permission_denied_error() {
+        let err = CommandError::PermissionDenied {
+            path: "/root/secret".to_string(),
+            operation: "write".to_string(),
+            required_permission: "write".to_string(),
+        };
+        assert!(err.to_string().contains("Permission denied"));
+        assert_eq!(err.category(), ErrorCategory::Security);
+    }
+
+    #[test]
+    fn test_directory_not_found_error() {
+        let err = CommandError::DirectoryNotFound {
+            path: "/missing/dir".to_string(),
+            operation: "list".to_string(),
+        };
+        assert!(err.to_string().contains("Directory not found"));
+    }
+
+    #[test]
+    fn test_file_too_large_error() {
+        let err = CommandError::FileTooLarge {
+            path: "huge.bin".to_string(),
+            size_mb: 500,
+            max_size_mb: 100,
+        };
+        assert!(err.to_string().contains("too large"));
+        assert!(err.to_string().contains("500"));
+        assert_eq!(err.severity(), ErrorSeverity::Warning);
+    }
+
+    #[test]
+    fn test_unsupported_file_type_error() {
+        let err = CommandError::UnsupportedFileType {
+            path: "file.xyz".to_string(),
+            extension: "xyz".to_string(),
+            supported: "rs, toml, md".to_string(),
+        };
+        assert!(err.to_string().contains("Unsupported file type"));
+    }
+
+    #[test]
+    fn test_sandbox_violation_error() {
+        let err = CommandError::SandboxViolation {
+            action: "write to /etc".to_string(),
+            level: "read-only".to_string(),
+            required_level: "workspace-write".to_string(),
+        };
+        assert!(err.to_string().contains("Sandbox violation"));
+        assert_eq!(err.category(), ErrorCategory::Security);
+    }
+
+    #[test]
+    fn test_approval_required_error() {
+        let err = CommandError::ApprovalRequired {
+            operation: "delete all".to_string(),
+            risk_level: "high".to_string(),
+            details: "destructive".to_string(),
+        };
+        assert!(err.to_string().contains("requires approval"));
+    }
+
+    #[test]
+    fn test_security_denied_error() {
+        let err = CommandError::SecurityDenied {
+            operation: "rm -rf /".to_string(),
+            reason: "dangerous".to_string(),
+        };
+        assert!(err.to_string().contains("denied by security policy"));
+        assert_eq!(err.category(), ErrorCategory::Security);
+    }
+
+    #[test]
+    fn test_content_parsing_failed_error() {
+        let err = CommandError::ContentParsingFailed {
+            reason: "invalid JSON".to_string(),
+            file_path: Some("data.json".to_string()),
+            expected_format: "JSON".to_string(),
+        };
+        assert!(err.to_string().contains("parsing failed"));
+    }
+
+    #[test]
+    fn test_content_generation_failed_error() {
+        let err = CommandError::ContentGenerationFailed {
+            reason: "template error".to_string(),
+            operation: "generate".to_string(),
+        };
+        assert!(err.to_string().contains("Content generation failed"));
+    }
+
+    #[test]
+    fn test_encoding_error() {
+        let err = CommandError::EncodingError {
+            reason: "invalid UTF-8".to_string(),
+            file_path: "file.txt".to_string(),
+            expected_encoding: "UTF-8".to_string(),
+        };
+        assert!(err.to_string().contains("encoding error"));
+    }
+
+    #[test]
+    fn test_resource_limit_exceeded_error() {
+        let err = CommandError::ResourceLimitExceeded {
+            resource: "memory".to_string(),
+            current: "500MB".to_string(),
+            maximum: "256MB".to_string(),
+        };
+        assert!(err.to_string().contains("Resource limit exceeded"));
+        assert_eq!(err.severity(), ErrorSeverity::Critical);
+    }
+
+    #[test]
+    fn test_dependency_failed_error() {
+        let err = CommandError::DependencyFailed {
+            dependency: "git".to_string(),
+            reason: "not found".to_string(),
+            suggestion: "install git".to_string(),
+        };
+        assert!(err.to_string().contains("External dependency failed"));
+        assert_eq!(err.category(), ErrorCategory::Network);
+    }
+
+    #[test]
+    fn test_service_unavailable_error() {
+        let err = CommandError::ServiceUnavailable {
+            service: "API".to_string(),
+            reason: "timeout".to_string(),
+        };
+        assert!(err.to_string().contains("Service unavailable"));
+        assert_eq!(err.category(), ErrorCategory::Network);
+    }
+
+    #[test]
+    fn test_memory_service_error() {
+        let err = CommandError::MemoryService(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "test error",
+        )));
+        assert!(err.to_string().contains("Memory service error"));
+        assert_eq!(err.category(), ErrorCategory::Internal);
+    }
+
+    #[test]
+    fn test_provider_service_error() {
+        let err = CommandError::ProviderService(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "test error",
+        )));
+        assert!(err.to_string().contains("Provider service error"));
+        assert_eq!(err.category(), ErrorCategory::Network);
+    }
+
+    #[test]
+    fn test_security_service_error() {
+        let err = CommandError::SecurityService(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "test error",
+        )));
+        assert!(err.to_string().contains("Security service error"));
+        assert_eq!(err.category(), ErrorCategory::Security);
+    }
+
+    #[test]
+    fn test_io_error() {
+        let err = CommandError::Io {
+            operation: "read".to_string(),
+            source: std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"),
+        };
+        assert!(err.to_string().contains("IO operation failed"));
+        assert!(err.debug_context().unwrap().contains("read"));
+    }
+
+    #[test]
+    fn test_generic_error() {
+        let err = CommandError::Generic {
+            message: "something went wrong".to_string(),
+            context: Some("during operation".to_string()),
+        };
+        assert!(err.to_string().contains("Command failed"));
+        assert_eq!(err.debug_context().unwrap(), "during operation");
+    }
+
+    #[test]
+    fn test_io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let cmd_err: CommandError = io_err.into();
+        assert!(matches!(cmd_err, CommandError::Io { .. }));
+    }
+
+    #[test]
+    fn test_fennec_error_conversion() {
+        let cmd_err = CommandError::InvalidArgument {
+            arg: "test".to_string(),
+            reason: "invalid".to_string(),
+            expected: "valid".to_string(),
+        };
+        let fennec_err: fennec_core::FennecError = cmd_err.into();
+        assert!(matches!(fennec_err, fennec_core::FennecError::Command(_)));
+    }
+
+    #[test]
+    fn test_recovery_actions_for_file_not_found() {
+        let err = CommandError::FileNotFound {
+            path: "test.rs".to_string(),
+            operation: "read".to_string(),
+        };
+        let actions = err.recovery_actions();
+        assert!(!actions.is_empty());
+    }
+
+    #[test]
+    fn test_recovery_actions_for_permission_denied() {
+        let err = CommandError::PermissionDenied {
+            path: "test.rs".to_string(),
+            operation: "write".to_string(),
+            required_permission: "write".to_string(),
+        };
+        let actions = err.recovery_actions();
+        assert!(!actions.is_empty());
+    }
+
+    #[test]
+    fn test_helper_function_missing_argument() {
+        let err = missing_argument("file", "path to file");
+        assert!(matches!(err, CommandError::MissingArgument { .. }));
+    }
+
+    #[test]
+    fn test_helper_function_invalid_argument() {
+        let err = invalid_argument("depth", "not a number", "1-10");
+        assert!(matches!(err, CommandError::InvalidArgument { .. }));
+    }
+
+    #[test]
+    fn test_helper_function_file_not_found() {
+        let err = file_not_found("test.rs", "read");
+        assert!(matches!(err, CommandError::FileNotFound { .. }));
+    }
+
+    #[test]
+    fn test_helper_function_permission_denied() {
+        let err = permission_denied("test.rs", "write", "write");
+        assert!(matches!(err, CommandError::PermissionDenied { .. }));
+    }
+
+    #[test]
+    fn test_helper_function_sandbox_violation() {
+        let err = sandbox_violation("write", "read-only", "workspace-write");
+        assert!(matches!(err, CommandError::SandboxViolation { .. }));
+    }
+
+    #[test]
+    fn test_helper_function_execution_failed() {
+        let err = execution_failed("failed", "test", Some(1));
+        assert!(matches!(err, CommandError::ExecutionFailed { .. }));
+    }
+
+    #[test]
+    fn test_user_messages() {
+        let errors = vec![
+            CommandError::InvalidArgument {
+                arg: "test".to_string(),
+                reason: "invalid".to_string(),
+                expected: "valid".to_string(),
+            },
+            CommandError::MissingArgument {
+                arg: "file".to_string(),
+                description: "path".to_string(),
+            },
+            CommandError::FileNotFound {
+                path: "test.rs".to_string(),
+                operation: "read".to_string(),
+            },
+            CommandError::PermissionDenied {
+                path: "test.rs".to_string(),
+                operation: "write".to_string(),
+                required_permission: "write".to_string(),
+            },
+            CommandError::SandboxViolation {
+                action: "write".to_string(),
+                level: "read-only".to_string(),
+                required_level: "workspace-write".to_string(),
+            },
+        ];
+
+        for err in errors {
+            let msg = err.user_message();
+            assert!(!msg.is_empty());
+        }
+    }
+}
