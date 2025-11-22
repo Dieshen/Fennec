@@ -184,9 +184,10 @@ fn extract_dependencies(content: &str, section: &str) -> Vec<Dependency> {
         if in_section && !line.is_empty() && !line.starts_with('#') {
             if let Some(name) = line.split('=').next() {
                 let name = name.trim().to_string();
-                let version = line.split('=').nth(1).map(|v| {
-                    v.trim().trim_matches('"').to_string()
-                });
+                let version = line
+                    .split('=')
+                    .nth(1)
+                    .map(|v| v.trim().trim_matches('"').to_string());
 
                 deps.push(Dependency {
                     name,
@@ -203,7 +204,9 @@ fn extract_dependencies(content: &str, section: &str) -> Vec<Dependency> {
 }
 
 /// Build dependency graph from workspace
-pub async fn build_dependency_graph(workspace_path: &Path) -> Result<DependencyGraph, std::io::Error> {
+pub async fn build_dependency_graph(
+    workspace_path: &Path,
+) -> Result<DependencyGraph, std::io::Error> {
     let mut graph = DependencyGraph::new();
 
     // Find all Cargo.toml files
@@ -234,11 +237,16 @@ fn find_cargo_files(
         while let Some(entry) = entries.next_entry().await? {
             let entry_path = entry.path();
 
-            if entry_path.is_file() && entry_path.file_name() == Some(std::ffi::OsStr::new("Cargo.toml")) {
+            if entry_path.is_file()
+                && entry_path.file_name() == Some(std::ffi::OsStr::new("Cargo.toml"))
+            {
                 result.push(entry_path);
             } else if entry_path.is_dir() {
                 let dir_name = entry_path.file_name().and_then(|n| n.to_str());
-                if dir_name != Some("target") && dir_name != Some("node_modules") && !dir_name.map(|n| n.starts_with('.')).unwrap_or(false) {
+                if dir_name != Some("target")
+                    && dir_name != Some("node_modules")
+                    && !dir_name.map(|n| n.starts_with('.')).unwrap_or(false)
+                {
                     let sub_files = find_cargo_files(entry_path).await?;
                     result.extend(sub_files);
                 }
@@ -261,15 +269,13 @@ mod tests {
             name: "test-pkg".to_string(),
             version: "1.0.0".to_string(),
             path: PathBuf::from("/test"),
-            dependencies: vec![
-                Dependency {
-                    name: "serde".to_string(),
-                    version: Some("1.0".to_string()),
-                    path: None,
-                    features: vec![],
-                    optional: false,
-                }
-            ],
+            dependencies: vec![Dependency {
+                name: "serde".to_string(),
+                version: Some("1.0".to_string()),
+                path: None,
+                features: vec![],
+                optional: false,
+            }],
             dev_dependencies: vec![],
             is_workspace_member: false,
         };
@@ -287,15 +293,13 @@ mod tests {
             name: "pkg1".to_string(),
             version: "1.0.0".to_string(),
             path: PathBuf::from("/pkg1"),
-            dependencies: vec![
-                Dependency {
-                    name: "base".to_string(),
-                    version: None,
-                    path: None,
-                    features: vec![],
-                    optional: false,
-                }
-            ],
+            dependencies: vec![Dependency {
+                name: "base".to_string(),
+                version: None,
+                path: None,
+                features: vec![],
+                optional: false,
+            }],
             dev_dependencies: vec![],
             is_workspace_member: false,
         };
@@ -315,15 +319,13 @@ mod tests {
             name: "pkg1".to_string(),
             version: "1.0.0".to_string(),
             path: PathBuf::from("/pkg1"),
-            dependencies: vec![
-                Dependency {
-                    name: "pkg2".to_string(),
-                    version: None,
-                    path: None,
-                    features: vec![],
-                    optional: false,
-                }
-            ],
+            dependencies: vec![Dependency {
+                name: "pkg2".to_string(),
+                version: None,
+                path: None,
+                features: vec![],
+                optional: false,
+            }],
             dev_dependencies: vec![],
             is_workspace_member: false,
         };
@@ -332,15 +334,13 @@ mod tests {
             name: "pkg2".to_string(),
             version: "1.0.0".to_string(),
             path: PathBuf::from("/pkg2"),
-            dependencies: vec![
-                Dependency {
-                    name: "pkg3".to_string(),
-                    version: None,
-                    path: None,
-                    features: vec![],
-                    optional: false,
-                }
-            ],
+            dependencies: vec![Dependency {
+                name: "pkg3".to_string(),
+                version: None,
+                path: None,
+                features: vec![],
+                optional: false,
+            }],
             dev_dependencies: vec![],
             is_workspace_member: false,
         };
@@ -361,7 +361,10 @@ name = "test-crate"
 version = "0.1.0"
         "#;
 
-        assert_eq!(extract_value(content, "name"), Some("test-crate".to_string()));
+        assert_eq!(
+            extract_value(content, "name"),
+            Some("test-crate".to_string())
+        );
         assert_eq!(extract_value(content, "version"), Some("0.1.0".to_string()));
     }
 }

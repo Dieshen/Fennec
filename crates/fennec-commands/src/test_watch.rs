@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
+use anyhow::Result;
 use fennec_core::command::{Capability, CommandPreview, CommandResult};
 use fennec_core::error::FennecError;
 use fennec_security::SandboxLevel;
@@ -38,10 +38,7 @@ fn default_test_command() -> String {
 }
 
 fn default_watch_patterns() -> Vec<String> {
-    vec![
-        "**/*.rs".to_string(),
-        "**/Cargo.toml".to_string(),
-    ]
+    vec!["**/*.rs".to_string(), "**/Cargo.toml".to_string()]
 }
 
 fn default_debounce_ms() -> u64 {
@@ -127,25 +124,30 @@ impl TestWatchCommand {
         let mut output = String::new();
 
         // Read stdout
-        while let Some(line) = stdout_lines.next_line().await.map_err(|e| {
-            FennecError::Command(Box::new(e))
-        })? {
+        while let Some(line) = stdout_lines
+            .next_line()
+            .await
+            .map_err(|e| FennecError::Command(Box::new(e)))?
+        {
             output.push_str(&line);
             output.push('\n');
         }
 
         // Read stderr
-        while let Some(line) = stderr_lines.next_line().await.map_err(|e| {
-            FennecError::Command(Box::new(e))
-        })? {
+        while let Some(line) = stderr_lines
+            .next_line()
+            .await
+            .map_err(|e| FennecError::Command(Box::new(e)))?
+        {
             output.push_str(&line);
             output.push('\n');
         }
 
         // Wait for completion
-        let status = child.wait().await.map_err(|e| {
-            FennecError::Command(Box::new(e))
-        })?;
+        let status = child
+            .wait()
+            .await
+            .map_err(|e| FennecError::Command(Box::new(e)))?;
 
         Ok((status.success(), output))
     }
@@ -212,7 +214,11 @@ impl TestWatchCommand {
             .await?;
 
         let status_icon = if success { "✅" } else { "❌" };
-        output.push_str(&format!("{} Tests {}\n\n", status_icon, if success { "passed" } else { "failed" }));
+        output.push_str(&format!(
+            "{} Tests {}\n\n",
+            status_icon,
+            if success { "passed" } else { "failed" }
+        ));
 
         // Limit output length
         let truncated_output = if test_output.len() > 1000 {

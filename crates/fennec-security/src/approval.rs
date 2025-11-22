@@ -510,7 +510,10 @@ mod tests {
     fn test_risk_level_max() {
         assert_eq!(RiskLevel::Low.max(RiskLevel::Medium), RiskLevel::Medium);
         assert_eq!(RiskLevel::High.max(RiskLevel::Low), RiskLevel::High);
-        assert_eq!(RiskLevel::Critical.max(RiskLevel::High), RiskLevel::Critical);
+        assert_eq!(
+            RiskLevel::Critical.max(RiskLevel::High),
+            RiskLevel::Critical
+        );
         assert_eq!(RiskLevel::Medium.max(RiskLevel::Medium), RiskLevel::Medium);
     }
 
@@ -589,10 +592,18 @@ mod tests {
     #[test]
     fn test_get_risk_warning() {
         let manager = ApprovalManager::default();
-        assert!(manager.get_risk_warning(&RiskLevel::Low).contains("minimal"));
-        assert!(manager.get_risk_warning(&RiskLevel::Medium).contains("security"));
-        assert!(manager.get_risk_warning(&RiskLevel::High).contains("WARNING"));
-        assert!(manager.get_risk_warning(&RiskLevel::Critical).contains("DANGER"));
+        assert!(manager
+            .get_risk_warning(&RiskLevel::Low)
+            .contains("minimal"));
+        assert!(manager
+            .get_risk_warning(&RiskLevel::Medium)
+            .contains("security"));
+        assert!(manager
+            .get_risk_warning(&RiskLevel::High)
+            .contains("WARNING"));
+        assert!(manager
+            .get_risk_warning(&RiskLevel::Critical)
+            .contains("DANGER"));
     }
 
     #[test]
@@ -605,31 +616,54 @@ mod tests {
 
         let critical_impl = manager.get_security_implications(&RiskLevel::Critical);
         assert!(!critical_impl.is_empty());
-        assert!(critical_impl.iter().any(|s| s.contains("Full system access")));
+        assert!(critical_impl
+            .iter()
+            .any(|s| s.contains("Full system access")));
     }
 
     #[test]
     fn test_classify_command_risk_critical() {
         assert_eq!(classify_command_risk("rm -rf /"), RiskLevel::Critical);
-        assert_eq!(classify_command_risk("sudo dd if=/dev/zero of=/dev/sda"), RiskLevel::Critical);
-        assert_eq!(classify_command_risk("chmod 777 /etc/passwd"), RiskLevel::Critical);
-        assert_eq!(classify_command_risk("shutdown -h now"), RiskLevel::Critical);
+        assert_eq!(
+            classify_command_risk("sudo dd if=/dev/zero of=/dev/sda"),
+            RiskLevel::Critical
+        );
+        assert_eq!(
+            classify_command_risk("chmod 777 /etc/passwd"),
+            RiskLevel::Critical
+        );
+        assert_eq!(
+            classify_command_risk("shutdown -h now"),
+            RiskLevel::Critical
+        );
     }
 
     #[test]
     fn test_classify_command_risk_high() {
         assert_eq!(classify_command_risk("sudo apt update"), RiskLevel::High);
         assert_eq!(classify_command_risk("chmod +x script.sh"), RiskLevel::High);
-        assert_eq!(classify_command_risk("systemctl restart nginx"), RiskLevel::High);
+        assert_eq!(
+            classify_command_risk("systemctl restart nginx"),
+            RiskLevel::High
+        );
         assert_eq!(classify_command_risk("ssh user@server"), RiskLevel::High);
     }
 
     #[test]
     fn test_classify_command_risk_medium() {
-        assert_eq!(classify_command_risk("curl https://example.com"), RiskLevel::Medium);
-        assert_eq!(classify_command_risk("npm install package"), RiskLevel::Medium);
+        assert_eq!(
+            classify_command_risk("curl https://example.com"),
+            RiskLevel::Medium
+        );
+        assert_eq!(
+            classify_command_risk("npm install package"),
+            RiskLevel::Medium
+        );
         assert_eq!(classify_command_risk("git clone repo"), RiskLevel::Medium);
-        assert_eq!(classify_command_risk("cargo build --release"), RiskLevel::Medium);
+        assert_eq!(
+            classify_command_risk("cargo build --release"),
+            RiskLevel::Medium
+        );
     }
 
     #[test]
@@ -722,7 +756,8 @@ mod tests {
             requires_approval: false,
         };
 
-        let sandbox = SandboxPolicy::new(crate::SandboxLevel::ReadOnly, PathBuf::from("/tmp"), false);
+        let sandbox =
+            SandboxPolicy::new(crate::SandboxLevel::ReadOnly, PathBuf::from("/tmp"), false);
         let manager = ApprovalManager::new(false, false);
 
         let status = check_command_approval(&preview, &sandbox, &manager).unwrap();
@@ -733,7 +768,10 @@ mod tests {
     fn test_classify_command_risk_case_insensitive() {
         assert_eq!(classify_command_risk("RM -RF /"), RiskLevel::Critical);
         assert_eq!(classify_command_risk("SUDO apt update"), RiskLevel::High);
-        assert_eq!(classify_command_risk("CURL http://example.com"), RiskLevel::Medium);
+        assert_eq!(
+            classify_command_risk("CURL http://example.com"),
+            RiskLevel::Medium
+        );
     }
 
     #[test]

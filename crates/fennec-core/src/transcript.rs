@@ -75,7 +75,10 @@ mod tests {
 
         assert_eq!(transcript.messages.len(), 3);
         assert!(matches!(transcript.messages[0].role, MessageRole::User));
-        assert!(matches!(transcript.messages[1].role, MessageRole::Assistant));
+        assert!(matches!(
+            transcript.messages[1].role,
+            MessageRole::Assistant
+        ));
         assert!(matches!(transcript.messages[2].role, MessageRole::System));
     }
 
@@ -103,7 +106,10 @@ mod tests {
         let session_id = Uuid::new_v4();
         let mut transcript = Transcript::new(session_id);
         transcript.add_message(MessageRole::Assistant, "test".to_string());
-        assert!(matches!(transcript.messages[0].role, MessageRole::Assistant));
+        assert!(matches!(
+            transcript.messages[0].role,
+            MessageRole::Assistant
+        ));
     }
 
     #[test]
@@ -171,7 +177,10 @@ mod tests {
 
         assert_eq!(deserialized.session_id, transcript.session_id);
         assert_eq!(deserialized.messages.len(), transcript.messages.len());
-        assert_eq!(deserialized.messages[0].content, transcript.messages[0].content);
+        assert_eq!(
+            deserialized.messages[0].content,
+            transcript.messages[0].content
+        );
     }
 
     #[test]
@@ -188,8 +197,8 @@ mod tests {
             assert!(matches!(
                 (&role, &deserialized),
                 (MessageRole::User, MessageRole::User)
-                | (MessageRole::Assistant, MessageRole::Assistant)
-                | (MessageRole::System, MessageRole::System)
+                    | (MessageRole::Assistant, MessageRole::Assistant)
+                    | (MessageRole::System, MessageRole::System)
             ));
         }
     }

@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::git_integration::{generate_pr_summary, get_commits, get_current_branch};
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
+use anyhow::Result;
 use fennec_core::command::{Capability, CommandPreview, CommandResult};
 use fennec_core::error::FennecError;
 use fennec_security::SandboxLevel;

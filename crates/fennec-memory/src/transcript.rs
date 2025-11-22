@@ -1176,7 +1176,10 @@ mod tests {
         };
 
         match event.event_type {
-            TimelineEventType::Message { role, content_preview } => {
+            TimelineEventType::Message {
+                role,
+                content_preview,
+            } => {
                 assert!(matches!(role, MessageRole::User));
                 assert_eq!(content_preview, "Hello");
             }
@@ -1193,7 +1196,11 @@ mod tests {
         };
 
         match event_type {
-            TimelineEventType::CommandExecution { command, success, duration } => {
+            TimelineEventType::CommandExecution {
+                command,
+                success,
+                duration,
+            } => {
                 assert_eq!(command, "cargo test");
                 assert!(success);
                 assert_eq!(duration, Some(Duration::from_secs(5)));
@@ -1210,7 +1217,10 @@ mod tests {
         };
 
         match event_type {
-            TimelineEventType::SegmentStart { title, segment_type } => {
+            TimelineEventType::SegmentStart {
+                title,
+                segment_type,
+            } => {
                 assert_eq!(title, "Implementation");
                 assert_eq!(segment_type, SegmentType::Implementation);
             }
@@ -1492,7 +1502,10 @@ mod tests {
         // Second load - from cache (should be faster)
         let transcript2 = store.load_transcript(session_id).await.unwrap().unwrap();
 
-        assert_eq!(transcript1.metadata.session_id, transcript2.metadata.session_id);
+        assert_eq!(
+            transcript1.metadata.session_id,
+            transcript2.metadata.session_id
+        );
     }
 
     #[tokio::test]
@@ -1563,11 +1576,17 @@ mod tests {
         transcript.add_message(MessageRole::User, "Hello".to_string());
 
         // Store initial
-        store.update_transcript(session_id, transcript.clone()).await.unwrap();
+        store
+            .update_transcript(session_id, transcript.clone())
+            .await
+            .unwrap();
 
         // Update with new message
         transcript.add_message(MessageRole::Assistant, "Hi!".to_string());
-        store.update_transcript(session_id, transcript).await.unwrap();
+        store
+            .update_transcript(session_id, transcript)
+            .await
+            .unwrap();
 
         // Verify
         let loaded = store.load_transcript(session_id).await.unwrap().unwrap();
@@ -1617,7 +1636,11 @@ mod tests {
 
         let session_id = Uuid::new_v4();
         store
-            .add_message(session_id, MessageRole::User, "Hello world from rust".to_string())
+            .add_message(
+                session_id,
+                MessageRole::User,
+                "Hello world from rust".to_string(),
+            )
             .await
             .unwrap();
 
@@ -1642,7 +1665,11 @@ mod tests {
         for _ in 0..5 {
             let session_id = Uuid::new_v4();
             store
-                .add_message(session_id, MessageRole::User, "rust programming".to_string())
+                .add_message(
+                    session_id,
+                    MessageRole::User,
+                    "rust programming".to_string(),
+                )
                 .await
                 .unwrap();
         }
@@ -1721,7 +1748,10 @@ mod tests {
             ..Default::default()
         };
 
-        store.update_conversation_context(session_id, update).await.unwrap();
+        store
+            .update_conversation_context(session_id, update)
+            .await
+            .unwrap();
 
         // Verify
         let transcript = store.load_transcript(session_id).await.unwrap().unwrap();
@@ -1729,7 +1759,10 @@ mod tests {
             transcript.conversation_context.user_intent,
             Some("Build feature".to_string())
         );
-        assert_eq!(transcript.conversation_context.technologies_mentioned.len(), 1);
+        assert_eq!(
+            transcript.conversation_context.technologies_mentioned.len(),
+            1
+        );
     }
 
     #[tokio::test]

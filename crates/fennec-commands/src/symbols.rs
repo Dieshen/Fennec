@@ -224,8 +224,8 @@ impl<'ast> Visit<'ast> for SymbolVisitor {
 
 /// Extract symbols from Rust source code
 pub fn extract_symbols(file_path: &Path, content: &str) -> Result<Vec<Symbol>, String> {
-    let syntax_tree = syn::parse_file(content)
-        .map_err(|e| format!("Failed to parse file: {}", e))?;
+    let syntax_tree =
+        syn::parse_file(content).map_err(|e| format!("Failed to parse file: {}", e))?;
 
     let mut visitor = SymbolVisitor::new(file_path.to_path_buf());
     visitor.visit_file(&syntax_tree);

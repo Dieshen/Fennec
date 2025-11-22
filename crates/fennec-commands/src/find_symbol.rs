@@ -1,13 +1,16 @@
-use anyhow::Result;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
 use crate::symbols::{extract_symbols, Symbol, SymbolIndex, SymbolType};
-use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
+use anyhow::Result;
+use fennec_core::{
+    command::{Capability, CommandPreview, CommandResult},
+    error::FennecError,
+};
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use tokio::fs;
 use uuid::Uuid;
 use walkdir::WalkDir;
-use tokio::fs;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FindSymbolArgs {
@@ -33,7 +36,9 @@ impl FindSymbolCommand {
         Self {
             descriptor: CommandDescriptor {
                 name: "find-symbol".to_string(),
-                description: "Find Rust symbols (functions, structs, traits, etc.) in the workspace".to_string(),
+                description:
+                    "Find Rust symbols (functions, structs, traits, etc.) in the workspace"
+                        .to_string(),
                 version: "1.0.0".to_string(),
                 author: Some("Fennec Contributors".to_string()),
                 capabilities_required: vec![Capability::ReadFile],
@@ -58,7 +63,11 @@ impl FindSymbolCommand {
         }
     }
 
-    async fn build_index(&self, workspace_path: &Path, context: &CommandContext) -> Result<SymbolIndex> {
+    async fn build_index(
+        &self,
+        workspace_path: &Path,
+        context: &CommandContext,
+    ) -> Result<SymbolIndex> {
         let mut index = SymbolIndex::new();
         let mut files_indexed = 0;
 
@@ -81,8 +90,9 @@ impl FindSymbolCommand {
             if files_indexed % 10 == 0 && context.cancellation_token.is_cancelled() {
                 return Err(FennecError::Command(Box::new(std::io::Error::new(
                     std::io::ErrorKind::Interrupted,
-                    "Indexing cancelled"
-                ))).into());
+                    "Indexing cancelled",
+                )))
+                .into());
             }
 
             let path = entry.path();
@@ -124,11 +134,15 @@ impl FindSymbolCommand {
         Ok(index)
     }
 
-    async fn perform_search(&self, args: &FindSymbolArgs, context: &CommandContext) -> Result<String> {
+    async fn perform_search(
+        &self,
+        args: &FindSymbolArgs,
+        context: &CommandContext,
+    ) -> Result<String> {
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = Path::new(workspace_path_str);
@@ -162,10 +176,16 @@ impl FindSymbolCommand {
         }
 
         // Format output
-        let mut output = format!("Found {} symbols matching '{}':\n\n", results.len(), args.query);
+        let mut output = format!(
+            "Found {} symbols matching '{}':\n\n",
+            results.len(),
+            args.query
+        );
 
         for symbol in &results {
-            let relative_path = symbol.path.strip_prefix(workspace_path)
+            let relative_path = symbol
+                .path
+                .strip_prefix(workspace_path)
                 .unwrap_or(&symbol.path);
 
             let type_str = match symbol.symbol_type {
@@ -222,11 +242,15 @@ impl CommandExecutor for FindSymbolCommand {
         &self.descriptor
     }
 
-    async fn preview(&self, args: &serde_json::Value, _context: &CommandContext) -> Result<CommandPreview> {
+    async fn preview(
+        &self,
+        args: &serde_json::Value,
+        _context: &CommandContext,
+    ) -> Result<CommandPreview> {
         let args: FindSymbolArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid find-symbol arguments: {}", e)
+                format!("Invalid find-symbol arguments: {}", e),
             )))
         })?;
 
@@ -244,11 +268,15 @@ impl CommandExecutor for FindSymbolCommand {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandResult> {
+    async fn execute(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandResult> {
         let args: FindSymbolArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid find-symbol arguments: {}", e)
+                format!("Invalid find-symbol arguments: {}", e),
             )))
         })?;
 
@@ -272,15 +300,16 @@ impl CommandExecutor for FindSymbolCommand {
         let args: FindSymbolArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid find-symbol arguments: {}", e)
+                format!("Invalid find-symbol arguments: {}", e),
             )))
         })?;
 
         if args.query.trim().is_empty() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Query cannot be empty"
-            ))).into());
+                "Query cannot be empty",
+            )))
+            .into());
         }
 
         if let Some(ref type_str) = args.symbol_type {
@@ -339,7 +368,10 @@ mod tests {
 
         let result = command.execute(&args, &context).await.unwrap();
         assert!(result.success, "Command should succeed");
-        assert!(result.output.contains("hello_world"), "Output should contain 'hello_world'");
+        assert!(
+            result.output.contains("hello_world"),
+            "Output should contain 'hello_world'"
+        );
     }
 
     #[tokio::test]

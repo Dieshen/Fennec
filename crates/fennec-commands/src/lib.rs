@@ -24,9 +24,9 @@ pub mod registry;
 pub mod rename;
 pub mod run;
 pub mod search;
-pub mod symbols;
 pub mod summarize;
 pub mod summarize_enhanced;
+pub mod symbols;
 pub mod test_watch;
 pub mod undo;
 

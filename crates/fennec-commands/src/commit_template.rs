@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::git_integration::generate_commit_template;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
+use anyhow::Result;
 use fennec_core::command::{Capability, CommandPreview, CommandResult};
 use fennec_core::error::FennecError;
 use fennec_security::SandboxLevel;
@@ -31,7 +31,8 @@ impl CommitTemplateCommand {
         Self {
             descriptor: CommandDescriptor {
                 name: "commit-template".to_string(),
-                description: "Generate a commit message template based on staged changes".to_string(),
+                description: "Generate a commit message template based on staged changes"
+                    .to_string(),
                 version: "1.0.0".to_string(),
                 author: Some("Fennec Contributors".to_string()),
                 capabilities_required: vec![Capability::ExecuteShell],

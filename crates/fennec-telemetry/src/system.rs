@@ -334,7 +334,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg_attr(target_os = "windows", ignore = "Flaky on Windows due to temp directory permissions")]
+    #[cfg_attr(
+        target_os = "windows",
+        ignore = "Flaky on Windows due to temp directory permissions"
+    )]
     async fn test_disabled_telemetry() {
         let mut config = TelemetryConfig::default();
         config.enabled = false;

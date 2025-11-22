@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::project_index::ProjectIndex;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
+use anyhow::Result;
 use fennec_core::command::{Capability, CommandPreview, CommandResult};
 use fennec_core::error::FennecError;
 use fennec_security::SandboxLevel;
@@ -47,11 +47,7 @@ impl IndexCommand {
         }
     }
 
-    async fn analyze_project(
-        &self,
-        args: &IndexArgs,
-        context: &CommandContext,
-    ) -> Result<String> {
+    async fn analyze_project(&self, args: &IndexArgs, context: &CommandContext) -> Result<String> {
         let workspace_path = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -62,14 +58,12 @@ impl IndexCommand {
         let workspace_path = Path::new(workspace_path);
 
         // Build project index
-        let index = ProjectIndex::build(workspace_path)
-            .await
-            .map_err(|e| {
-                FennecError::Command(Box::new(std::io::Error::new(
-                    e.kind(),
-                    format!("Failed to build project index: {}", e),
-                )))
-            })?;
+        let index = ProjectIndex::build(workspace_path).await.map_err(|e| {
+            FennecError::Command(Box::new(std::io::Error::new(
+                e.kind(),
+                format!("Failed to build project index: {}", e),
+            )))
+        })?;
 
         match args.analysis_type.as_str() {
             "stats" => self.format_statistics(&index, args.detailed),
@@ -84,7 +78,10 @@ impl IndexCommand {
                 }
             }
             "modules" => self.format_module_hierarchy(&index, args.detailed),
-            _ => Ok(format!("Unknown analysis type: {}. Available types: stats, deps, symbols, impact, modules", args.analysis_type)),
+            _ => Ok(format!(
+                "Unknown analysis type: {}. Available types: stats, deps, symbols, impact, modules",
+                args.analysis_type
+            )),
         }
     }
 
@@ -98,7 +95,11 @@ impl IndexCommand {
         output.push_str(&format!("📁 Modules: {}\n", stats.total_modules));
         output.push_str(&format!(
             "🔄 Circular Dependencies: {}\n\n",
-            if stats.has_circular_deps { "⚠️  Yes" } else { "✅ No" }
+            if stats.has_circular_deps {
+                "⚠️  Yes"
+            } else {
+                "✅ No"
+            }
         ));
 
         if detailed {
@@ -127,7 +128,11 @@ impl IndexCommand {
             if !pkg.dependencies.is_empty() {
                 output.push_str("  Dependencies:\n");
                 for dep in &pkg.dependencies {
-                    let version = dep.version.as_ref().map(|v| format!(" v{}", v)).unwrap_or_default();
+                    let version = dep
+                        .version
+                        .as_ref()
+                        .map(|v| format!(" v{}", v))
+                        .unwrap_or_default();
                     output.push_str(&format!("    - {}{}\n", dep.name, version));
                 }
             }
@@ -187,13 +192,19 @@ impl IndexCommand {
         output.push_str("🎯 Impact Analysis\n\n");
         output.push_str(&format!("File: {}\n\n", analysis.file_path.display()));
 
-        output.push_str(&format!("Affected Symbols ({}):  \n", analysis.affected_symbols.len()));
+        output.push_str(&format!(
+            "Affected Symbols ({}):  \n",
+            analysis.affected_symbols.len()
+        ));
         for symbol in &analysis.affected_symbols {
             output.push_str(&format!("  - {}\n", symbol));
         }
         output.push('\n');
 
-        output.push_str(&format!("Affected Packages ({}):\n", analysis.affected_packages.len()));
+        output.push_str(&format!(
+            "Affected Packages ({}):\n",
+            analysis.affected_packages.len()
+        ));
         for package in &analysis.affected_packages {
             output.push_str(&format!("  - {}\n", package));
         }
@@ -220,7 +231,13 @@ impl IndexCommand {
         Ok(output)
     }
 
-    fn format_module_node(&self, node: &crate::project_index::ModuleNode, depth: usize, detailed: bool, output: &mut String) {
+    fn format_module_node(
+        &self,
+        node: &crate::project_index::ModuleNode,
+        depth: usize,
+        detailed: bool,
+        output: &mut String,
+    ) {
         let indent = "  ".repeat(depth);
 
         output.push_str(&format!("{}📁 {}", indent, node.name));
@@ -234,7 +251,11 @@ impl IndexCommand {
                 output.push_str(&format!("{}  - {}\n", indent, symbol));
             }
             if node.symbols.len() > 5 {
-                output.push_str(&format!("{}  ... and {} more\n", indent, node.symbols.len() - 5));
+                output.push_str(&format!(
+                    "{}  ... and {} more\n",
+                    indent,
+                    node.symbols.len() - 5
+                ));
             }
         }
 
@@ -340,11 +361,11 @@ impl CommandExecutor for IndexCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio_util::sync::CancellationToken;
-    use tempfile::TempDir;
-    use crate::project_index::{ProjectIndex, ModuleNode, ModuleHierarchy};
     use crate::dependency_graph::DependencyGraph;
+    use crate::project_index::{ModuleHierarchy, ModuleNode, ProjectIndex};
     use crate::symbols::SymbolIndex;
+    use tempfile::TempDir;
+    use tokio_util::sync::CancellationToken;
 
     #[test]
     fn test_default_analysis_type() {

@@ -318,12 +318,7 @@ mod tests {
         let old_content = "line 1\nline 2\nline 3\n";
         let new_content = "line 1\nmodified line 2\nline 3\n";
 
-        let hunks = split_diff_into_hunks(
-            PathBuf::from("test.txt"),
-            old_content,
-            new_content,
-            1,
-        );
+        let hunks = split_diff_into_hunks(PathBuf::from("test.txt"), old_content, new_content, 1);
 
         assert_eq!(hunks.len(), 1);
         assert_eq!(hunks[0].old_content, vec!["line 2"]);
@@ -335,12 +330,7 @@ mod tests {
         let old_content = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n";
         let new_content = "line 1\nmodified 2\nline 3\nline 4\nline 5\nmodified 6\n";
 
-        let hunks = split_diff_into_hunks(
-            PathBuf::from("test.txt"),
-            old_content,
-            new_content,
-            0,
-        );
+        let hunks = split_diff_into_hunks(PathBuf::from("test.txt"), old_content, new_content, 0);
 
         // Should have 2 hunks for the two separate changes
         assert!(hunks.len() >= 1);

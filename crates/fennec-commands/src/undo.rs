@@ -1,7 +1,10 @@
-use anyhow::Result;
 use crate::action_log::{ActionLog, ActionState};
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
-use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
+use anyhow::Result;
+use fennec_core::{
+    command::{Capability, CommandPreview, CommandResult},
+    error::FennecError,
+};
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -44,7 +47,7 @@ impl UndoCommand {
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = std::path::Path::new(workspace_path_str);
@@ -59,7 +62,7 @@ impl UndoCommand {
             let action = self.action_log.undo().await?.ok_or_else(|| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "No actions to undo"
+                    "No actions to undo",
                 )))
             })?;
 
@@ -83,7 +86,7 @@ impl UndoCommand {
                             fs::create_dir_all(parent).await.map_err(|e| {
                                 FennecError::Command(Box::new(std::io::Error::new(
                                     e.kind(),
-                                    format!("Failed to create parent directories: {}", e)
+                                    format!("Failed to create parent directories: {}", e),
                                 )))
                             })?;
                         }
@@ -91,7 +94,7 @@ impl UndoCommand {
                         fs::write(&full_path, content).await.map_err(|e| {
                             FennecError::Command(Box::new(std::io::Error::new(
                                 e.kind(),
-                                format!("Failed to restore file: {}", e)
+                                format!("Failed to restore file: {}", e),
                             )))
                         })?;
                     }
@@ -107,7 +110,7 @@ impl UndoCommand {
                     fs::write(&full_path, content).await.map_err(|e| {
                         FennecError::Command(Box::new(std::io::Error::new(
                             e.kind(),
-                            format!("Failed to restore file content: {}", e)
+                            format!("Failed to restore file content: {}", e),
                         )))
                     })?;
                 }
@@ -123,7 +126,7 @@ impl UndoCommand {
                         fs::remove_file(&full_path).await.map_err(|e| {
                             FennecError::Command(Box::new(std::io::Error::new(
                                 e.kind(),
-                                format!("Failed to remove file: {}", e)
+                                format!("Failed to remove file: {}", e),
                             )))
                         })?;
                     }
@@ -145,7 +148,7 @@ impl UndoCommand {
                         fs::rename(&to_full, &from_full).await.map_err(|e| {
                             FennecError::Command(Box::new(std::io::Error::new(
                                 e.kind(),
-                                format!("Failed to reverse rename: {}", e)
+                                format!("Failed to reverse rename: {}", e),
                             )))
                         })?;
                     }
@@ -162,7 +165,7 @@ impl UndoCommand {
                         fs::create_dir_all(&full_path).await.map_err(|e| {
                             FennecError::Command(Box::new(std::io::Error::new(
                                 e.kind(),
-                                format!("Failed to create directory: {}", e)
+                                format!("Failed to create directory: {}", e),
                             )))
                         })?;
 
@@ -178,7 +181,7 @@ impl UndoCommand {
                                 fs::create_dir_all(parent).await.map_err(|e| {
                                     FennecError::Command(Box::new(std::io::Error::new(
                                         e.kind(),
-                                        format!("Failed to create parent directories: {}", e)
+                                        format!("Failed to create parent directories: {}", e),
                                     )))
                                 })?;
                             }
@@ -186,7 +189,7 @@ impl UndoCommand {
                             fs::write(&file_full_path, content).await.map_err(|e| {
                                 FennecError::Command(Box::new(std::io::Error::new(
                                     e.kind(),
-                                    format!("Failed to restore file: {}", e)
+                                    format!("Failed to restore file: {}", e),
                                 )))
                             })?;
                         }
@@ -204,7 +207,7 @@ impl UndoCommand {
                         fs::remove_dir_all(&full_path).await.map_err(|e| {
                             FennecError::Command(Box::new(std::io::Error::new(
                                 e.kind(),
-                                format!("Failed to remove directory: {}", e)
+                                format!("Failed to remove directory: {}", e),
                             )))
                         })?;
                     }
@@ -234,11 +237,15 @@ impl CommandExecutor for UndoCommand {
         &self.descriptor
     }
 
-    async fn preview(&self, args: &serde_json::Value, _context: &CommandContext) -> Result<CommandPreview> {
+    async fn preview(
+        &self,
+        args: &serde_json::Value,
+        _context: &CommandContext,
+    ) -> Result<CommandPreview> {
         let args: UndoArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid undo arguments: {}", e)
+                format!("Invalid undo arguments: {}", e),
             )))
         })?;
 
@@ -261,11 +268,15 @@ impl CommandExecutor for UndoCommand {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandResult> {
+    async fn execute(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandResult> {
         let args: UndoArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid undo arguments: {}", e)
+                format!("Invalid undo arguments: {}", e),
             )))
         })?;
 
@@ -289,15 +300,16 @@ impl CommandExecutor for UndoCommand {
         let args: UndoArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid undo arguments: {}", e)
+                format!("Invalid undo arguments: {}", e),
             )))
         })?;
 
         if args.count == 0 {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Count must be greater than 0"
-            ))).into());
+                "Count must be greater than 0",
+            )))
+            .into());
         }
 
         Ok(())

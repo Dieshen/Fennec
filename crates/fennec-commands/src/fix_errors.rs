@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::compiler_errors::{extract_fixes, parse_cargo_json, FixConfidence, SuggestedFix};
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
+use anyhow::Result;
 use fennec_core::command::{Capability, CommandPreview, CommandResult};
 use fennec_core::error::FennecError;
 use fennec_security::SandboxLevel;
@@ -126,9 +126,11 @@ impl FixErrorsCommand {
         let mut all_fixes = Vec::new();
 
         // Parse output line by line
-        while let Some(line) = reader.next_line().await.map_err(|e| {
-            FennecError::Command(Box::new(e))
-        })? {
+        while let Some(line) = reader
+            .next_line()
+            .await
+            .map_err(|e| FennecError::Command(Box::new(e)))?
+        {
             // Check for cancellation
             if context.cancellation_token.is_cancelled() {
                 let _ = child.kill().await;
@@ -172,14 +174,12 @@ impl FixErrorsCommand {
         let min_confidence = Self::parse_confidence(&args.min_confidence);
         let filtered_fixes: Vec<_> = all_fixes
             .into_iter()
-            .filter(|f| {
-                match (&f.confidence, &min_confidence) {
-                    (FixConfidence::High, _) => true,
-                    (FixConfidence::Medium, FixConfidence::Low) => true,
-                    (FixConfidence::Medium, FixConfidence::Medium) => true,
-                    (FixConfidence::Low, FixConfidence::Low) => true,
-                    _ => false,
-                }
+            .filter(|f| match (&f.confidence, &min_confidence) {
+                (FixConfidence::High, _) => true,
+                (FixConfidence::Medium, FixConfidence::Low) => true,
+                (FixConfidence::Medium, FixConfidence::Medium) => true,
+                (FixConfidence::Low, FixConfidence::Low) => true,
+                _ => false,
             })
             .take(args.max_fixes)
             .collect();
@@ -313,10 +313,22 @@ mod tests {
 
     #[test]
     fn test_parse_confidence() {
-        assert_eq!(FixErrorsCommand::parse_confidence("high"), FixConfidence::High);
-        assert_eq!(FixErrorsCommand::parse_confidence("medium"), FixConfidence::Medium);
-        assert_eq!(FixErrorsCommand::parse_confidence("low"), FixConfidence::Low);
-        assert_eq!(FixErrorsCommand::parse_confidence("invalid"), FixConfidence::Medium);
+        assert_eq!(
+            FixErrorsCommand::parse_confidence("high"),
+            FixConfidence::High
+        );
+        assert_eq!(
+            FixErrorsCommand::parse_confidence("medium"),
+            FixConfidence::Medium
+        );
+        assert_eq!(
+            FixErrorsCommand::parse_confidence("low"),
+            FixConfidence::Low
+        );
+        assert_eq!(
+            FixErrorsCommand::parse_confidence("invalid"),
+            FixConfidence::Medium
+        );
     }
 
     #[test]

@@ -120,7 +120,12 @@ impl Action {
     }
 
     /// Create an action for file deletion
-    pub fn file_deleted(command: String, path: PathBuf, content: Vec<u8>, description: String) -> Self {
+    pub fn file_deleted(
+        command: String,
+        path: PathBuf,
+        content: Vec<u8>,
+        description: String,
+    ) -> Self {
         Self::new(
             command,
             ActionState::FileCreated { path: path.clone() },
@@ -130,12 +135,7 @@ impl Action {
     }
 
     /// Create an action for file move/rename
-    pub fn file_moved(
-        command: String,
-        from: PathBuf,
-        to: PathBuf,
-        description: String,
-    ) -> Self {
+    pub fn file_moved(command: String, from: PathBuf, to: PathBuf, description: String) -> Self {
         Self::new(
             command,
             ActionState::FileMoved {

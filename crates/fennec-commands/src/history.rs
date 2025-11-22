@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::action_log::ActionLog;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
+use anyhow::Result;
 use fennec_core::command::{Capability, CommandPreview, CommandResult};
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
@@ -70,21 +70,24 @@ impl HistoryCommand {
 
         let start = actions.len().saturating_sub(limit);
         for (idx, action) in actions.iter().enumerate().skip(start) {
-            let marker = if idx < current_index {
-                "✓"
-            } else {
-                "○"
-            };
+            let marker = if idx < current_index { "✓" } else { "○" };
 
             let timestamp = action.timestamp.format("%Y-%m-%d %H:%M:%S");
 
             output.push_str(&format!(
                 "{} [{}] {} - {} ({})\n",
-                marker, idx + 1, timestamp, action.description, action.command
+                marker,
+                idx + 1,
+                timestamp,
+                action.description,
+                action.command
             ));
 
             // Show the state change
-            output.push_str(&format!("   Path: {}\n", action.state_after.path().display()));
+            output.push_str(&format!(
+                "   Path: {}\n",
+                action.state_after.path().display()
+            ));
         }
 
         output.push_str("\nLegend: ✓ = applied, ○ = undone\n");
@@ -105,7 +108,11 @@ impl CommandExecutor for HistoryCommand {
         &self.descriptor
     }
 
-    async fn preview(&self, _args: &serde_json::Value, _context: &CommandContext) -> Result<CommandPreview> {
+    async fn preview(
+        &self,
+        _args: &serde_json::Value,
+        _context: &CommandContext,
+    ) -> Result<CommandPreview> {
         let count = self.action_log.get_history().await.len();
 
         Ok(CommandPreview {
@@ -116,7 +123,11 @@ impl CommandExecutor for HistoryCommand {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value, _context: &CommandContext) -> Result<CommandResult> {
+    async fn execute(
+        &self,
+        args: &serde_json::Value,
+        _context: &CommandContext,
+    ) -> Result<CommandResult> {
         let args: HistoryArgs = serde_json::from_value(args.clone()).unwrap_or(HistoryArgs {
             limit: default_limit(),
             show_all: false,

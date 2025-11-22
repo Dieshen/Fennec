@@ -1388,7 +1388,9 @@ mod tests {
 
         // Insert bundle with old timestamp
         let old_time = chrono::Utc::now() - chrono::Duration::hours(2);
-        cache.bundles.insert("old_key".to_string(), (bundle, old_time));
+        cache
+            .bundles
+            .insert("old_key".to_string(), (bundle, old_time));
 
         // Should return None due to TTL expiration
         let retrieved = cache.get("old_key", 60); // 60 minutes TTL
@@ -1425,9 +1427,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_engine_new() {
-        let memory_service = std::sync::Arc::new(
-            crate::service::MemoryService::new().await.unwrap()
-        );
+        let memory_service =
+            std::sync::Arc::new(crate::service::MemoryService::new().await.unwrap());
         let engine = ContextEngine::new(memory_service);
 
         assert_eq!(engine.config.max_context_tokens, 4000);
@@ -1436,9 +1437,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_engine_with_config() {
-        let memory_service = std::sync::Arc::new(
-            crate::service::MemoryService::new().await.unwrap()
-        );
+        let memory_service =
+            std::sync::Arc::new(crate::service::MemoryService::new().await.unwrap());
 
         let mut config = ContextConfig::default();
         config.max_context_tokens = 8000;
@@ -1454,8 +1454,14 @@ mod tests {
         let memory_service = create_test_memory_service();
         let engine = ContextEngine::new(memory_service);
 
-        assert_eq!(engine.classify_importance(0.85), ContextImportance::Critical);
-        assert_eq!(engine.classify_importance(0.95), ContextImportance::Critical);
+        assert_eq!(
+            engine.classify_importance(0.85),
+            ContextImportance::Critical
+        );
+        assert_eq!(
+            engine.classify_importance(0.95),
+            ContextImportance::Critical
+        );
     }
 
     #[test]
@@ -1884,7 +1890,7 @@ mod tests {
         std::sync::Arc::new(
             tokio::runtime::Runtime::new()
                 .unwrap()
-                .block_on(async { crate::service::MemoryService::new().await.unwrap() })
+                .block_on(async { crate::service::MemoryService::new().await.unwrap() }),
         )
     }
 

@@ -530,8 +530,9 @@ pub trait SimpleCommandIntegration {
 mod tests {
     use super::*;
     use crate::context::{
-        CacheStatus, ContextBundleMetadata, ContextDiscoveryStrategy, ContextImportance, ContextItem,
-        ContextItemMetadata, ContextQualityMetrics, ContextSizeInfo, ContextSummary, ContentClassification,
+        CacheStatus, ContentClassification, ContextBundleMetadata, ContextDiscoveryStrategy,
+        ContextImportance, ContextItem, ContextItemMetadata, ContextQualityMetrics,
+        ContextSizeInfo, ContextSummary,
     };
 
     #[test]
@@ -565,7 +566,10 @@ mod tests {
         let deserialized: ContextRequirements = serde_json::from_str(&json).unwrap();
 
         assert_eq!(deserialized.max_tokens, requirements.max_tokens);
-        assert_eq!(deserialized.include_full_content, requirements.include_full_content);
+        assert_eq!(
+            deserialized.include_full_content,
+            requirements.include_full_content
+        );
     }
 
     #[test]
@@ -766,7 +770,9 @@ mod tests {
 
         // Add more items
         for i in 0..5 {
-            bundle.items.push(create_test_context_item(&format!("item-{}", i), 0.7));
+            bundle
+                .items
+                .push(create_test_context_item(&format!("item-{}", i), 0.7));
         }
 
         let formatted = service.format_user_context(&bundle);
@@ -959,7 +965,9 @@ mod tests {
         bundle.items[0].content = "An error occurred during execution".to_string();
 
         let suggestions = service.generate_session_suggestions(&bundle);
-        assert!(suggestions.iter().any(|s| s.contains("Review recent errors")));
+        assert!(suggestions
+            .iter()
+            .any(|s| s.contains("Review recent errors")));
     }
 
     #[tokio::test]
@@ -969,7 +977,9 @@ mod tests {
         bundle.items[0].content = "Test failed with exception".to_string();
 
         let suggestions = service.generate_session_suggestions(&bundle);
-        assert!(suggestions.iter().any(|s| s.contains("Review recent errors")));
+        assert!(suggestions
+            .iter()
+            .any(|s| s.contains("Review recent errors")));
     }
 
     #[tokio::test]

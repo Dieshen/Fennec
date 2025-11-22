@@ -1,6 +1,9 @@
-use anyhow::Result;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
-use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
+use anyhow::Result;
+use fennec_core::{
+    command::{Capability, CommandPreview, CommandResult},
+    error::FennecError,
+};
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -45,7 +48,9 @@ impl SearchCommand {
         Self {
             descriptor: CommandDescriptor {
                 name: "search".to_string(),
-                description: "Search for text across project files with optional regex and filtering".to_string(),
+                description:
+                    "Search for text across project files with optional regex and filtering"
+                        .to_string(),
                 version: "1.0.0".to_string(),
                 author: Some("Fennec Contributors".to_string()),
                 capabilities_required: vec![Capability::ReadFile],
@@ -75,9 +80,33 @@ impl SearchCommand {
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             matches!(
                 ext.to_lowercase().as_str(),
-                "rs" | "toml" | "md" | "txt" | "json" | "yaml" | "yml" | "sh" | "py" | "js"
-                    | "ts" | "html" | "css" | "xml" | "c" | "cpp" | "h" | "hpp" | "go" | "java"
-                    | "kt" | "swift" | "rb" | "php" | "sql" | "lock" | "gitignore" | "env"
+                "rs" | "toml"
+                    | "md"
+                    | "txt"
+                    | "json"
+                    | "yaml"
+                    | "yml"
+                    | "sh"
+                    | "py"
+                    | "js"
+                    | "ts"
+                    | "html"
+                    | "css"
+                    | "xml"
+                    | "c"
+                    | "cpp"
+                    | "h"
+                    | "hpp"
+                    | "go"
+                    | "java"
+                    | "kt"
+                    | "swift"
+                    | "rb"
+                    | "php"
+                    | "sql"
+                    | "lock"
+                    | "gitignore"
+                    | "env"
             )
         } else {
             true
@@ -104,7 +133,7 @@ impl SearchCommand {
             Some(regex::Regex::new(&pattern_str).map_err(|e| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    format!("Invalid regex: {}", e)
+                    format!("Invalid regex: {}", e),
                 )))
             })?)
         } else {
@@ -166,7 +195,10 @@ impl SearchCommand {
             .max_depth(10)
             .into_iter()
             .filter_entry(|e| {
-                !e.file_name().to_str().map(|s| s.starts_with('.') || s == "target" || s == "node_modules").unwrap_or(false)
+                !e.file_name()
+                    .to_str()
+                    .map(|s| s.starts_with('.') || s == "target" || s == "node_modules")
+                    .unwrap_or(false)
             })
             .filter_map(|e| e.ok())
         {
@@ -193,7 +225,7 @@ impl SearchCommand {
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = Path::new(workspace_path_str);
@@ -201,17 +233,27 @@ impl SearchCommand {
         if context.cancellation_token.is_cancelled() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Interrupted,
-                "Search cancelled"
-            ))).into());
+                "Search cancelled",
+            )))
+            .into());
         }
 
         if args.filename_only {
-            let results = Self::search_filenames(workspace_path, &args.query, args.case_insensitive, args.max_results)?;
+            let results = Self::search_filenames(
+                workspace_path,
+                &args.query,
+                args.case_insensitive,
+                args.max_results,
+            )?;
 
             if results.is_empty() {
                 Ok("No files found matching query".to_string())
             } else {
-                let mut output = format!("Found {} files matching '{}':\n\n", results.len(), args.query);
+                let mut output = format!(
+                    "Found {} files matching '{}':\n\n",
+                    results.len(),
+                    args.query
+                );
                 for path in &results {
                     if let Ok(rel_path) = path.strip_prefix(workspace_path) {
                         output.push_str(&format!("  {}\n", rel_path.display()));
@@ -226,24 +268,39 @@ impl SearchCommand {
             for entry in WalkDir::new(workspace_path)
                 .max_depth(10)
                 .into_iter()
-                .filter_entry(|e| !e.file_name().to_str().map(|s| s.starts_with('.') || s == "target" || s == "node_modules").unwrap_or(false))
+                .filter_entry(|e| {
+                    !e.file_name()
+                        .to_str()
+                        .map(|s| s.starts_with('.') || s == "target" || s == "node_modules")
+                        .unwrap_or(false)
+                })
                 .filter_map(|e| e.ok())
             {
                 if files_searched % 50 == 0 && context.cancellation_token.is_cancelled() {
                     return Err(FennecError::Command(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Interrupted,
-                        "Search cancelled"
-                    ))).into());
+                        "Search cancelled",
+                    )))
+                    .into());
                 }
 
                 let path = entry.path();
-                if !path.is_file() || !Self::should_search_file(path, &args.pattern) || !Self::is_text_file(path) {
+                if !path.is_file()
+                    || !Self::should_search_file(path, &args.pattern)
+                    || !Self::is_text_file(path)
+                {
                     continue;
                 }
 
                 files_searched += 1;
 
-                if let Ok(results) = Self::search_in_file(path, &args.query, args.case_insensitive, args.regex, args.context_lines) {
+                if let Ok(results) = Self::search_in_file(
+                    path,
+                    &args.query,
+                    args.case_insensitive,
+                    args.regex,
+                    args.context_lines,
+                ) {
                     all_results.extend(results);
                     if all_results.len() >= args.max_results {
                         break;
@@ -252,13 +309,26 @@ impl SearchCommand {
             }
 
             if all_results.is_empty() {
-                Ok(format!("No matches found for '{}' in {} files", args.query, files_searched))
+                Ok(format!(
+                    "No matches found for '{}' in {} files",
+                    args.query, files_searched
+                ))
             } else {
-                let mut output = format!("Found {} matches for '{}' in {} files:\n\n", all_results.len(), args.query, files_searched);
+                let mut output = format!(
+                    "Found {} matches for '{}' in {} files:\n\n",
+                    all_results.len(),
+                    args.query,
+                    files_searched
+                );
                 for result in &all_results {
                     if let Ok(rel_path) = result.file_path.strip_prefix(workspace_path) {
-                        output.push_str(&format!("{}:{} ({} matches)\n  > {}\n\n", 
-                            rel_path.display(), result.line_number, result.match_count, result.line_content.trim()));
+                        output.push_str(&format!(
+                            "{}:{} ({} matches)\n  > {}\n\n",
+                            rel_path.display(),
+                            result.line_number,
+                            result.match_count,
+                            result.line_content.trim()
+                        ));
                     }
                 }
                 Ok(output)
@@ -279,19 +349,31 @@ impl CommandExecutor for SearchCommand {
         &self.descriptor
     }
 
-    async fn preview(&self, args: &serde_json::Value, _context: &CommandContext) -> Result<CommandPreview> {
+    async fn preview(
+        &self,
+        args: &serde_json::Value,
+        _context: &CommandContext,
+    ) -> Result<CommandPreview> {
         let args: SearchArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid search arguments: {}", e)
+                format!("Invalid search arguments: {}", e),
             )))
         })?;
 
         let description = if args.filename_only {
             format!("Search for files matching '{}'", args.query)
         } else {
-            format!("Search for '{}' in {} files{}", args.query, args.pattern.as_deref().unwrap_or("all"),
-                if args.case_insensitive { " (case-insensitive)" } else { "" })
+            format!(
+                "Search for '{}' in {} files{}",
+                args.query,
+                args.pattern.as_deref().unwrap_or("all"),
+                if args.case_insensitive {
+                    " (case-insensitive)"
+                } else {
+                    ""
+                }
+            )
         };
 
         Ok(CommandPreview {
@@ -302,11 +384,15 @@ impl CommandExecutor for SearchCommand {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandResult> {
+    async fn execute(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandResult> {
         let args: SearchArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid search arguments: {}", e)
+                format!("Invalid search arguments: {}", e),
             )))
         })?;
 
@@ -330,15 +416,16 @@ impl CommandExecutor for SearchCommand {
         let args: SearchArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid search arguments: {}", e)
+                format!("Invalid search arguments: {}", e),
             )))
         })?;
 
         if args.query.trim().is_empty() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Search query cannot be empty"
-            ))).into());
+                "Search query cannot be empty",
+            )))
+            .into());
         }
 
         Ok(())
@@ -354,8 +441,14 @@ mod tests {
     #[test]
     fn test_should_search_file() {
         let path = Path::new("src/main.rs");
-        assert!(SearchCommand::should_search_file(path, &Some("*.rs".to_string())));
-        assert!(!SearchCommand::should_search_file(path, &Some("*.toml".to_string())));
+        assert!(SearchCommand::should_search_file(
+            path,
+            &Some("*.rs".to_string())
+        ));
+        assert!(!SearchCommand::should_search_file(
+            path,
+            &Some("*.toml".to_string())
+        ));
         assert!(SearchCommand::should_search_file(path, &None));
     }
 

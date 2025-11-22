@@ -53,9 +53,9 @@ pub struct SuggestedFix {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FixConfidence {
-    High,    // Compiler explicitly suggests this fix
-    Medium,  // Inferred from error message
-    Low,     // Heuristic-based suggestion
+    High,   // Compiler explicitly suggests this fix
+    Medium, // Inferred from error message
+    Low,    // Heuristic-based suggestion
 }
 
 impl SuggestedFix {
@@ -342,7 +342,10 @@ mod tests {
 
         let message = parse_cargo_json(json).unwrap();
         assert_eq!(message.level, MessageLevel::Warning);
-        assert_eq!(message.spans[0].suggested_replacement, Some("_y".to_string()));
+        assert_eq!(
+            message.spans[0].suggested_replacement,
+            Some("_y".to_string())
+        );
     }
 
     #[test]

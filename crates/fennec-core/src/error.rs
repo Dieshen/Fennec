@@ -818,10 +818,7 @@ mod tests {
             FennecError::PermissionDenied {
                 path: "/secret".to_string(),
             },
-            FennecError::SessionLimitExceeded {
-                current: 5,
-                max: 3,
-            },
+            FennecError::SessionLimitExceeded { current: 5, max: 3 },
         ];
 
         for err in errors {

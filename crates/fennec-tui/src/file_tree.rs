@@ -256,13 +256,16 @@ impl FileTreeBrowser {
         None
     }
 
-
     /// Render the file tree
     pub fn render(&mut self, area: Rect, buf: &mut Buffer) {
         // Build title
         let title = format!(
             " Files {} ",
-            if self.show_hidden { "(showing hidden)" } else { "" }
+            if self.show_hidden {
+                "(showing hidden)"
+            } else {
+                ""
+            }
         );
 
         // Build items without borrowing self mutably
@@ -274,12 +277,7 @@ impl FileTreeBrowser {
         // Update list state to show selection
         self.list_state.select(Some(self.selected_index));
 
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(title)
-            );
+        let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
 
         StatefulWidget::render(list, area, buf, &mut self.list_state);
     }

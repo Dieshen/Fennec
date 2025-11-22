@@ -681,7 +681,9 @@ mod tests {
         assert_eq!(err.category(), ErrorCategory::System);
         assert_eq!(err.severity(), ErrorSeverity::Error);
         let actions = err.recovery_actions();
-        assert!(actions.iter().any(|a| matches!(a, RecoveryAction::ManualAction(_))));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, RecoveryAction::ManualAction(_))));
     }
 
     #[test]
@@ -922,7 +924,9 @@ mod tests {
 
     #[test]
     fn test_event_queue_overflow_error() {
-        let err = TuiError::EventQueueOverflow { pending_count: 1000 };
+        let err = TuiError::EventQueueOverflow {
+            pending_count: 1000,
+        };
         assert!(err.to_string().contains("Event queue overflow"));
         assert_eq!(err.category(), ErrorCategory::System);
         assert_eq!(err.severity(), ErrorSeverity::Error);
@@ -1064,7 +1068,9 @@ mod tests {
         };
         let actions = err.recovery_actions();
         assert!(!actions.is_empty());
-        assert!(actions.iter().any(|a| matches!(a, RecoveryAction::ManualAction(_))));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, RecoveryAction::ManualAction(_))));
     }
 
     #[test]
@@ -1081,17 +1087,37 @@ mod tests {
         };
         let actions = err.recovery_actions();
         assert!(actions.len() > 1);
-        assert!(actions.iter().any(|a| matches!(a, RecoveryAction::ContactSupport(_))));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, RecoveryAction::ContactSupport(_))));
     }
 
     // Test user messages
     #[test]
     fn test_user_messages() {
         let cases = vec![
-            (TuiError::TerminalTooSmall { width: 60, height: 20, min_width: 80, min_height: 24 }, "resize"),
+            (
+                TuiError::TerminalTooSmall {
+                    width: 60,
+                    height: 20,
+                    min_width: 80,
+                    min_height: 24,
+                },
+                "resize",
+            ),
             (TuiError::InputBufferFull, "busy"),
-            (TuiError::ThemeNotFound { theme: "test".to_string() }, "Theme not found"),
-            (TuiError::AppStateCorrupted { component: "main".to_string() }, "restart"),
+            (
+                TuiError::ThemeNotFound {
+                    theme: "test".to_string(),
+                },
+                "Theme not found",
+            ),
+            (
+                TuiError::AppStateCorrupted {
+                    component: "main".to_string(),
+                },
+                "restart",
+            ),
         ];
 
         for (err, expected) in cases {
@@ -1160,11 +1186,8 @@ mod tests {
         ];
 
         for (severity, expected_color) in cases {
-            let display = ErrorDisplay::from_message(
-                "Test".to_string(),
-                ErrorCategory::Internal,
-                severity,
-            );
+            let display =
+                ErrorDisplay::from_message("Test".to_string(), ErrorCategory::Internal, severity);
             assert_eq!(display.severity_color(), expected_color);
         }
     }
@@ -1179,11 +1202,8 @@ mod tests {
         ];
 
         for (severity, expected_icon) in cases {
-            let display = ErrorDisplay::from_message(
-                "Test".to_string(),
-                ErrorCategory::Internal,
-                severity,
-            );
+            let display =
+                ErrorDisplay::from_message("Test".to_string(), ErrorCategory::Internal, severity);
             assert_eq!(display.severity_icon(), expected_icon);
         }
     }

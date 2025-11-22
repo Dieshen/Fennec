@@ -1,7 +1,10 @@
-use anyhow::Result;
 use crate::action_log::{ActionLog, ActionState};
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
-use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
+use anyhow::Result;
+use fennec_core::{
+    command::{Capability, CommandPreview, CommandResult},
+    error::FennecError,
+};
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -44,7 +47,7 @@ impl RedoCommand {
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = std::path::Path::new(workspace_path_str);
@@ -59,7 +62,7 @@ impl RedoCommand {
             let action = self.action_log.redo().await?.ok_or_else(|| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "No actions to redo"
+                    "No actions to redo",
                 )))
             })?;
 
@@ -83,7 +86,7 @@ impl RedoCommand {
                             fs::create_dir_all(parent).await.map_err(|e| {
                                 FennecError::Command(Box::new(std::io::Error::new(
                                     e.kind(),
-                                    format!("Failed to create parent directories: {}", e)
+                                    format!("Failed to create parent directories: {}", e),
                                 )))
                             })?;
                         }
@@ -91,7 +94,7 @@ impl RedoCommand {
                         fs::write(&full_path, content).await.map_err(|e| {
                             FennecError::Command(Box::new(std::io::Error::new(
                                 e.kind(),
-                                format!("Failed to create file: {}", e)
+                                format!("Failed to create file: {}", e),
                             )))
                         })?;
                     }
@@ -107,7 +110,7 @@ impl RedoCommand {
                     fs::write(&full_path, content).await.map_err(|e| {
                         FennecError::Command(Box::new(std::io::Error::new(
                             e.kind(),
-                            format!("Failed to restore file content: {}", e)
+                            format!("Failed to restore file content: {}", e),
                         )))
                     })?;
                 }
@@ -123,7 +126,7 @@ impl RedoCommand {
                         fs::remove_file(&full_path).await.map_err(|e| {
                             FennecError::Command(Box::new(std::io::Error::new(
                                 e.kind(),
-                                format!("Failed to remove file: {}", e)
+                                format!("Failed to remove file: {}", e),
                             )))
                         })?;
                     }
@@ -146,7 +149,7 @@ impl RedoCommand {
                             fs::create_dir_all(parent).await.map_err(|e| {
                                 FennecError::Command(Box::new(std::io::Error::new(
                                     e.kind(),
-                                    format!("Failed to create parent directories: {}", e)
+                                    format!("Failed to create parent directories: {}", e),
                                 )))
                             })?;
                         }
@@ -154,7 +157,7 @@ impl RedoCommand {
                         fs::rename(&from_full, &to_full).await.map_err(|e| {
                             FennecError::Command(Box::new(std::io::Error::new(
                                 e.kind(),
-                                format!("Failed to rename: {}", e)
+                                format!("Failed to rename: {}", e),
                             )))
                         })?;
                     }
@@ -170,7 +173,7 @@ impl RedoCommand {
                     fs::create_dir_all(&full_path).await.map_err(|e| {
                         FennecError::Command(Box::new(std::io::Error::new(
                             e.kind(),
-                            format!("Failed to create directory: {}", e)
+                            format!("Failed to create directory: {}", e),
                         )))
                     })?;
                 }
@@ -186,7 +189,7 @@ impl RedoCommand {
                         fs::remove_dir_all(&full_path).await.map_err(|e| {
                             FennecError::Command(Box::new(std::io::Error::new(
                                 e.kind(),
-                                format!("Failed to remove directory: {}", e)
+                                format!("Failed to remove directory: {}", e),
                             )))
                         })?;
                     }
@@ -216,11 +219,15 @@ impl CommandExecutor for RedoCommand {
         &self.descriptor
     }
 
-    async fn preview(&self, args: &serde_json::Value, _context: &CommandContext) -> Result<CommandPreview> {
+    async fn preview(
+        &self,
+        args: &serde_json::Value,
+        _context: &CommandContext,
+    ) -> Result<CommandPreview> {
         let args: RedoArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid redo arguments: {}", e)
+                format!("Invalid redo arguments: {}", e),
             )))
         })?;
 
@@ -243,11 +250,15 @@ impl CommandExecutor for RedoCommand {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandResult> {
+    async fn execute(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandResult> {
         let args: RedoArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid redo arguments: {}", e)
+                format!("Invalid redo arguments: {}", e),
             )))
         })?;
 
@@ -271,15 +282,16 @@ impl CommandExecutor for RedoCommand {
         let args: RedoArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid redo arguments: {}", e)
+                format!("Invalid redo arguments: {}", e),
             )))
         })?;
 
         if args.count == 0 {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Count must be greater than 0"
-            ))).into());
+                "Count must be greater than 0",
+            )))
+            .into());
         }
 
         Ok(())

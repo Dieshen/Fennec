@@ -1,12 +1,15 @@
-use anyhow::Result;
 use crate::action_log::Action;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
-use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
+use anyhow::Result;
+use fennec_core::{
+    command::{Capability, CommandPreview, CommandResult},
+    error::FennecError,
+};
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use uuid::Uuid;
 use tokio::fs;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateArgs {
@@ -41,7 +44,7 @@ impl CreateCommand {
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = Path::new(workspace_path_str);
@@ -57,16 +60,18 @@ impl CreateCommand {
         if !target_path.starts_with(workspace_path) {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
-                "Cannot create files outside workspace"
-            ))).into());
+                "Cannot create files outside workspace",
+            )))
+            .into());
         }
 
         // Check if path already exists
         if target_path.exists() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                format!("Path already exists: {}", target_path.display())
-            ))).into());
+                format!("Path already exists: {}", target_path.display()),
+            )))
+            .into());
         }
 
         // Create parent directories if they don't exist
@@ -86,7 +91,7 @@ impl CreateCommand {
                 fs::create_dir_all(parent).await.map_err(|e| {
                     FennecError::Command(Box::new(std::io::Error::new(
                         e.kind(),
-                        format!("Failed to create parent directories: {}", e)
+                        format!("Failed to create parent directories: {}", e),
                     )))
                 })?;
             }
@@ -98,9 +103,11 @@ impl CreateCommand {
                 if args.is_directory {
                     format!("Would create directory: {}", target_path.display())
                 } else {
-                    format!("Would create file: {} with {} bytes",
+                    format!(
+                        "Would create file: {} with {} bytes",
                         target_path.display(),
-                        args.content.as_ref().map(|c| c.len()).unwrap_or(0))
+                        args.content.as_ref().map(|c| c.len()).unwrap_or(0)
+                    )
                 }
             ));
         }
@@ -110,7 +117,7 @@ impl CreateCommand {
             fs::create_dir(&target_path).await.map_err(|e| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     e.kind(),
-                    format!("Failed to create directory: {}", e)
+                    format!("Failed to create directory: {}", e),
                 )))
             })?;
 
@@ -130,7 +137,7 @@ impl CreateCommand {
             fs::write(&target_path, content).await.map_err(|e| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     e.kind(),
-                    format!("Failed to create file: {}", e)
+                    format!("Failed to create file: {}", e),
                 )))
             })?;
 
@@ -139,12 +146,20 @@ impl CreateCommand {
                 let action = Action::file_created(
                     "create".to_string(),
                     target_path.clone(),
-                    format!("Created file: {} ({} bytes)", target_path.display(), content.len()),
+                    format!(
+                        "Created file: {} ({} bytes)",
+                        target_path.display(),
+                        content.len()
+                    ),
                 );
                 action_log.record(action).await;
             }
 
-            format!("Created file: {} ({} bytes)", target_path.display(), content.len())
+            format!(
+                "Created file: {} ({} bytes)",
+                target_path.display(),
+                content.len()
+            )
         };
 
         Ok(result)
@@ -163,18 +178,22 @@ impl CommandExecutor for CreateCommand {
         &self.descriptor
     }
 
-    async fn preview(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandPreview> {
+    async fn preview(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandPreview> {
         let args: CreateArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid create arguments: {}", e)
+                format!("Invalid create arguments: {}", e),
             )))
         })?;
 
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = Path::new(workspace_path_str);
@@ -188,9 +207,11 @@ impl CommandExecutor for CreateCommand {
         let description = if args.is_directory {
             format!("Create directory: {}", target_path.display())
         } else {
-            format!("Create file: {} ({} bytes)",
+            format!(
+                "Create file: {} ({} bytes)",
                 target_path.display(),
-                args.content.as_ref().map(|c| c.len()).unwrap_or(0))
+                args.content.as_ref().map(|c| c.len()).unwrap_or(0)
+            )
         };
 
         Ok(CommandPreview {
@@ -201,11 +222,15 @@ impl CommandExecutor for CreateCommand {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandResult> {
+    async fn execute(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandResult> {
         let args: CreateArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid create arguments: {}", e)
+                format!("Invalid create arguments: {}", e),
             )))
         })?;
 
@@ -229,15 +254,16 @@ impl CommandExecutor for CreateCommand {
         let args: CreateArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid create arguments: {}", e)
+                format!("Invalid create arguments: {}", e),
             )))
         })?;
 
         if args.path.as_os_str().is_empty() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Path cannot be empty"
-            ))).into());
+                "Path cannot be empty",
+            )))
+            .into());
         }
 
         // Validate no parent directory traversal attempts
@@ -245,8 +271,9 @@ impl CommandExecutor for CreateCommand {
         if path_str.contains("..") {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Path traversal not allowed"
-            ))).into());
+                "Path traversal not allowed",
+            )))
+            .into());
         }
 
         Ok(())

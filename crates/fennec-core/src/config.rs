@@ -23,10 +23,26 @@ pub struct TelemetryConfigRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
+    /// Which provider to use: "openai", "anthropic", "openrouter"
+    #[serde(default = "default_provider")]
+    pub provider: String,
+
+    // OpenAI configuration
     pub openai_api_key: Option<String>,
+
+    // Anthropic configuration
+    pub anthropic_api_key: Option<String>,
+
+    // OpenRouter configuration
+    pub openrouter_api_key: Option<String>,
+
     pub default_model: String,
     pub base_url: Option<String>,
     pub timeout_seconds: u64,
+}
+
+fn default_provider() -> String {
+    "openai".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +76,10 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             provider: ProviderConfig {
+                provider: "openai".to_string(),
                 openai_api_key: None,
+                anthropic_api_key: None,
+                openrouter_api_key: None,
                 default_model: "gpt-4".to_string(),
                 base_url: None,
                 timeout_seconds: 30,
@@ -136,14 +155,33 @@ impl Config {
     }
 
     fn load_env_overrides(&mut self) {
+        // Provider selection
+        if let Ok(provider) = std::env::var("FENNEC_PROVIDER") {
+            self.provider.provider = provider;
+        }
+
+        // OpenAI
         if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
             self.provider.openai_api_key = Some(api_key);
         }
-
         if let Ok(base_url) = std::env::var("OPENAI_BASE_URL") {
             self.provider.base_url = Some(base_url);
         }
 
+        // Anthropic
+        if let Ok(api_key) = std::env::var("ANTHROPIC_API_KEY") {
+            self.provider.anthropic_api_key = Some(api_key);
+        }
+        if let Ok(base_url) = std::env::var("ANTHROPIC_BASE_URL") {
+            self.provider.base_url = Some(base_url);
+        }
+
+        // OpenRouter
+        if let Ok(api_key) = std::env::var("OPENROUTER_API_KEY") {
+            self.provider.openrouter_api_key = Some(api_key);
+        }
+
+        // General settings
         if let Ok(model) = std::env::var("FENNEC_DEFAULT_MODEL") {
             self.provider.default_model = model;
         }
@@ -315,7 +353,10 @@ mod tests {
 
         let result = Config::load(Some(&config_path)).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), crate::FennecError::ConfigLoadFailed { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::FennecError::ConfigLoadFailed { .. }
+        ));
     }
 
     #[tokio::test]
@@ -328,8 +369,14 @@ mod tests {
         let mut config = Config::default();
         config.load_env_overrides();
 
-        assert_eq!(config.provider.openai_api_key, Some("test-api-key".to_string()));
-        assert_eq!(config.provider.base_url, Some("https://test.openai.com".to_string()));
+        assert_eq!(
+            config.provider.openai_api_key,
+            Some("test-api-key".to_string())
+        );
+        assert_eq!(
+            config.provider.base_url,
+            Some("https://test.openai.com".to_string())
+        );
         assert_eq!(config.provider.default_model, "gpt-3.5-turbo");
 
         // Clean up

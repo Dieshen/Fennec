@@ -2,8 +2,8 @@
 
 use crate::{config::MetricsConfig, Error, Result};
 use metrics::{
-    counter, histogram, Counter, Gauge, Histogram, Key, KeyName, Metadata, Recorder,
-    SharedString, Unit,
+    counter, histogram, Counter, Gauge, Histogram, Key, KeyName, Metadata, Recorder, SharedString,
+    Unit,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

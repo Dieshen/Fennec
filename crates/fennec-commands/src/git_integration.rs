@@ -100,7 +100,10 @@ fn parse_git_log(log: &str) -> Result<Vec<GitCommit>, std::io::Error> {
 
             if i + 1 < lines.len() {
                 let stats_line = lines[i + 1].trim();
-                if stats_line.contains("file") || stats_line.contains("insertion") || stats_line.contains("deletion") {
+                if stats_line.contains("file")
+                    || stats_line.contains("insertion")
+                    || stats_line.contains("deletion")
+                {
                     // Parse stats: "1 file changed, 5 insertions(+), 2 deletions(-)"
                     if let Some(files) = stats_line.split("file").next() {
                         files_changed = files.trim().parse().unwrap_or(0);
@@ -198,25 +201,19 @@ pub fn generate_pr_summary(commits: &[GitCommit]) -> String {
 
     // Summary header
     summary.push_str("## Summary\n\n");
-    summary.push_str(&format!("This PR includes {} commit(s).\n\n", commits.len()));
+    summary.push_str(&format!(
+        "This PR includes {} commit(s).\n\n",
+        commits.len()
+    ));
 
     // Overall stats
     let total_files: usize = commits.iter().map(|c| c.files_changed).sum();
     let total_insertions: usize = commits.iter().map(|c| c.insertions).sum();
     let total_deletions: usize = commits.iter().map(|c| c.deletions).sum();
 
-    summary.push_str(&format!(
-        "- **Files changed**: {}\n",
-        total_files
-    ));
-    summary.push_str(&format!(
-        "- **Insertions**: +{}\n",
-        total_insertions
-    ));
-    summary.push_str(&format!(
-        "- **Deletions**: -{}\n\n",
-        total_deletions
-    ));
+    summary.push_str(&format!("- **Files changed**: {}\n", total_files));
+    summary.push_str(&format!("- **Insertions**: +{}\n", total_insertions));
+    summary.push_str(&format!("- **Deletions**: -{}\n\n", total_deletions));
 
     // Commit list
     summary.push_str("## Commits\n\n");
@@ -232,9 +229,13 @@ pub fn generate_pr_summary(commits: &[GitCommit]) -> String {
     summary.push_str("\n## Changes by Author\n\n");
 
     // Group by author
-    let mut authors: std::collections::HashMap<String, Vec<&GitCommit>> = std::collections::HashMap::new();
+    let mut authors: std::collections::HashMap<String, Vec<&GitCommit>> =
+        std::collections::HashMap::new();
     for commit in commits {
-        authors.entry(commit.author.clone()).or_default().push(commit);
+        authors
+            .entry(commit.author.clone())
+            .or_default()
+            .push(commit);
     }
 
     for (author, author_commits) in authors {
@@ -255,9 +256,7 @@ pub fn generate_pr_summary(commits: &[GitCommit]) -> String {
 }
 
 /// Generate a commit message template based on staged changes
-pub async fn generate_commit_template(
-    repo_path: &str,
-) -> Result<String, std::io::Error> {
+pub async fn generate_commit_template(repo_path: &str) -> Result<String, std::io::Error> {
     // Get list of staged files
     let output = Command::new("git")
         .current_dir(repo_path)
@@ -278,7 +277,10 @@ pub async fn generate_commit_template(
     let lines: Vec<&str> = stdout.lines().collect();
 
     if lines.is_empty() {
-        return Ok("No staged changes found.\n\nPlease stage your changes with 'git add' first.".to_string());
+        return Ok(
+            "No staged changes found.\n\nPlease stage your changes with 'git add' first."
+                .to_string(),
+        );
     }
 
     // Analyze changes
@@ -302,17 +304,21 @@ pub async fn generate_commit_template(
     }
 
     // Determine commit type
-    let commit_type = if !added_files.is_empty() && modified_files.is_empty() && deleted_files.is_empty() {
-        "feat"
-    } else if !deleted_files.is_empty() && added_files.is_empty() && modified_files.is_empty() {
-        "chore"
-    } else if modified_files.iter().any(|f| f.contains("test")) {
-        "test"
-    } else if modified_files.iter().any(|f| f.contains(".md") || f.contains("README")) {
-        "docs"
-    } else {
-        "fix"
-    };
+    let commit_type =
+        if !added_files.is_empty() && modified_files.is_empty() && deleted_files.is_empty() {
+            "feat"
+        } else if !deleted_files.is_empty() && added_files.is_empty() && modified_files.is_empty() {
+            "chore"
+        } else if modified_files.iter().any(|f| f.contains("test")) {
+            "test"
+        } else if modified_files
+            .iter()
+            .any(|f| f.contains(".md") || f.contains("README"))
+        {
+            "docs"
+        } else {
+            "fix"
+        };
 
     // Generate template
     let mut template = String::new();

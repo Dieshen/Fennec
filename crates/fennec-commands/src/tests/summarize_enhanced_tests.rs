@@ -23,7 +23,7 @@ fn create_test_context(workspace_path: Option<PathBuf>) -> CommandContext {
         dry_run: false,
         preview_only: false,
         cancellation_token: CancellationToken::new(),
-            action_log: None,
+        action_log: None,
     }
 }
 

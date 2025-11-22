@@ -1,12 +1,15 @@
-use anyhow::Result;
 use crate::action_log::Action;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
-use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
+use anyhow::Result;
+use fennec_core::{
+    command::{Capability, CommandPreview, CommandResult},
+    error::FennecError,
+};
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use uuid::Uuid;
 use tokio::fs;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteArgs {
@@ -44,7 +47,15 @@ impl DeleteCommand {
     fn is_protected_path(path: &Path) -> bool {
         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
             // Protect git, cargo, and other critical directories/files
-            matches!(name, ".git" | ".gitignore" | "Cargo.toml" | "Cargo.lock" | "package.json" | "package-lock.json")
+            matches!(
+                name,
+                ".git"
+                    | ".gitignore"
+                    | "Cargo.toml"
+                    | "Cargo.lock"
+                    | "package.json"
+                    | "package-lock.json"
+            )
         } else {
             false
         }
@@ -54,7 +65,7 @@ impl DeleteCommand {
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = Path::new(workspace_path_str);
@@ -70,24 +81,27 @@ impl DeleteCommand {
         if !target_path.starts_with(workspace_path) {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
-                "Cannot delete files outside workspace"
-            ))).into());
+                "Cannot delete files outside workspace",
+            )))
+            .into());
         }
 
         // Check if path exists
         if !target_path.exists() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Path does not exist: {}", target_path.display())
-            ))).into());
+                format!("Path does not exist: {}", target_path.display()),
+            )))
+            .into());
         }
 
         // Safety check: don't delete critical paths
         if Self::is_protected_path(&target_path) {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
-                format!("Cannot delete protected path: {}", target_path.display())
-            ))).into());
+                format!("Cannot delete protected path: {}", target_path.display()),
+            )))
+            .into());
         }
 
         let is_dir = target_path.is_dir();
@@ -96,8 +110,9 @@ impl DeleteCommand {
         if is_dir && !args.confirm {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
-                "Directory deletion requires confirmation"
-            ))).into());
+                "Directory deletion requires confirmation",
+            )))
+            .into());
         }
 
         // Check if recursive flag is needed for non-empty directories
@@ -105,20 +120,26 @@ impl DeleteCommand {
             let mut entries = fs::read_dir(&target_path).await.map_err(|e| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     e.kind(),
-                    format!("Failed to read directory: {}", e)
+                    format!("Failed to read directory: {}", e),
                 )))
             })?;
 
-            if entries.next_entry().await.map_err(|e| {
-                FennecError::Command(Box::new(std::io::Error::new(
-                    e.kind(),
-                    format!("Failed to check directory contents: {}", e)
-                )))
-            })?.is_some() {
+            if entries
+                .next_entry()
+                .await
+                .map_err(|e| {
+                    FennecError::Command(Box::new(std::io::Error::new(
+                        e.kind(),
+                        format!("Failed to check directory contents: {}", e),
+                    )))
+                })?
+                .is_some()
+            {
                 return Err(FennecError::Command(Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    "Directory is not empty; use recursive flag to delete"
-                ))).into());
+                    "Directory is not empty; use recursive flag to delete",
+                )))
+                .into());
             }
         }
 
@@ -136,14 +157,14 @@ impl DeleteCommand {
                 fs::remove_dir_all(&target_path).await.map_err(|e| {
                     FennecError::Command(Box::new(std::io::Error::new(
                         e.kind(),
-                        format!("Failed to delete directory: {}", e)
+                        format!("Failed to delete directory: {}", e),
                     )))
                 })?;
             } else {
                 fs::remove_dir(&target_path).await.map_err(|e| {
                     FennecError::Command(Box::new(std::io::Error::new(
                         e.kind(),
-                        format!("Failed to delete directory: {}", e)
+                        format!("Failed to delete directory: {}", e),
                     )))
                 })?;
             }
@@ -165,14 +186,14 @@ impl DeleteCommand {
             let content = fs::read(&target_path).await.map_err(|e| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     e.kind(),
-                    format!("Failed to read file before deletion: {}", e)
+                    format!("Failed to read file before deletion: {}", e),
                 )))
             })?;
 
             fs::remove_file(&target_path).await.map_err(|e| {
                 FennecError::Command(Box::new(std::io::Error::new(
                     e.kind(),
-                    format!("Failed to delete file: {}", e)
+                    format!("Failed to delete file: {}", e),
                 )))
             })?;
 
@@ -206,18 +227,22 @@ impl CommandExecutor for DeleteCommand {
         &self.descriptor
     }
 
-    async fn preview(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandPreview> {
+    async fn preview(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandPreview> {
         let args: DeleteArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid delete arguments: {}", e)
+                format!("Invalid delete arguments: {}", e),
             )))
         })?;
 
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = Path::new(workspace_path_str);
@@ -244,11 +269,15 @@ impl CommandExecutor for DeleteCommand {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandResult> {
+    async fn execute(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandResult> {
         let args: DeleteArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid delete arguments: {}", e)
+                format!("Invalid delete arguments: {}", e),
             )))
         })?;
 
@@ -272,15 +301,16 @@ impl CommandExecutor for DeleteCommand {
         let args: DeleteArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid delete arguments: {}", e)
+                format!("Invalid delete arguments: {}", e),
             )))
         })?;
 
         if args.path.as_os_str().is_empty() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Path cannot be empty"
-            ))).into());
+                "Path cannot be empty",
+            )))
+            .into());
         }
 
         // Validate no parent directory traversal attempts
@@ -288,8 +318,9 @@ impl CommandExecutor for DeleteCommand {
         if path_str.contains("..") {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Path traversal not allowed"
-            ))).into());
+                "Path traversal not allowed",
+            )))
+            .into());
         }
 
         Ok(())

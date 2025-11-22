@@ -89,7 +89,9 @@ impl ProjectIndex {
         Ok(index)
     }
 
-    async fn build_module_hierarchy(workspace_path: &Path) -> Result<ModuleHierarchy, std::io::Error> {
+    async fn build_module_hierarchy(
+        workspace_path: &Path,
+    ) -> Result<ModuleHierarchy, std::io::Error> {
         let root = Self::scan_directory(workspace_path.to_path_buf(), "root".to_string()).await?;
         Ok(ModuleHierarchy { root })
     }
@@ -105,7 +107,8 @@ impl ProjectIndex {
             if let Ok(mut entries) = fs::read_dir(&path).await {
                 while let Some(entry) = entries.next_entry().await? {
                     let entry_path = entry.path();
-                    let file_name = entry_path.file_name()
+                    let file_name = entry_path
+                        .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("")
                         .to_string();
@@ -115,7 +118,8 @@ impl ProjectIndex {
                     }
 
                     if entry_path.is_dir() {
-                        if let Ok(child) = Self::scan_directory(entry_path.clone(), file_name).await {
+                        if let Ok(child) = Self::scan_directory(entry_path.clone(), file_name).await
+                        {
                             children.push(child);
                         }
                     } else if file_name.ends_with(".rs") {
@@ -177,7 +181,11 @@ impl ProjectIndex {
     }
 
     fn count_modules(&self, node: &ModuleNode) -> usize {
-        1 + node.children.iter().map(|c| self.count_modules(c)).sum::<usize>()
+        1 + node
+            .children
+            .iter()
+            .map(|c| self.count_modules(c))
+            .sum::<usize>()
     }
 }
 
@@ -202,8 +210,8 @@ pub struct ProjectStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_module_node_creation() {
@@ -366,7 +374,7 @@ mod tests {
         let lib_file = src_dir.join("lib.rs");
         fs::write(
             &lib_file,
-            "pub struct TestStruct { pub field: i32 }\npub fn test_function() {}"
+            "pub struct TestStruct { pub field: i32 }\npub fn test_function() {}",
         )
         .unwrap();
 
@@ -418,11 +426,8 @@ mod tests {
     #[tokio::test]
     async fn test_scan_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let result = ProjectIndex::scan_directory(
-            temp_dir.path().to_path_buf(),
-            "test".to_string(),
-        )
-        .await;
+        let result =
+            ProjectIndex::scan_directory(temp_dir.path().to_path_buf(), "test".to_string()).await;
         assert!(result.is_ok());
         let node = result.unwrap();
         assert_eq!(node.name, "test");
@@ -434,11 +439,8 @@ mod tests {
         let subdir = temp_dir.path().join("subdir");
         fs::create_dir(&subdir).unwrap();
 
-        let result = ProjectIndex::scan_directory(
-            temp_dir.path().to_path_buf(),
-            "root".to_string(),
-        )
-        .await;
+        let result =
+            ProjectIndex::scan_directory(temp_dir.path().to_path_buf(), "root".to_string()).await;
         assert!(result.is_ok());
         let node = result.unwrap();
         // Should have found the subdirectory
@@ -451,11 +453,8 @@ mod tests {
         let hidden = temp_dir.path().join(".hidden");
         fs::create_dir(&hidden).unwrap();
 
-        let result = ProjectIndex::scan_directory(
-            temp_dir.path().to_path_buf(),
-            "root".to_string(),
-        )
-        .await;
+        let result =
+            ProjectIndex::scan_directory(temp_dir.path().to_path_buf(), "root".to_string()).await;
         assert!(result.is_ok());
         let node = result.unwrap();
         // Hidden directories should be filtered
@@ -470,11 +469,8 @@ mod tests {
         let target = temp_dir.path().join("target");
         fs::create_dir(&target).unwrap();
 
-        let result = ProjectIndex::scan_directory(
-            temp_dir.path().to_path_buf(),
-            "root".to_string(),
-        )
-        .await;
+        let result =
+            ProjectIndex::scan_directory(temp_dir.path().to_path_buf(), "root".to_string()).await;
         assert!(result.is_ok());
         let node = result.unwrap();
         // Target directory should be filtered

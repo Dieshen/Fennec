@@ -1,12 +1,15 @@
-use anyhow::Result;
 use crate::action_log::Action;
 use crate::registry::{CommandContext, CommandDescriptor, CommandExecutor};
-use fennec_core::{command::{Capability, CommandPreview, CommandResult}, error::FennecError};
+use anyhow::Result;
+use fennec_core::{
+    command::{Capability, CommandPreview, CommandResult},
+    error::FennecError,
+};
 use fennec_security::SandboxLevel;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use uuid::Uuid;
 use tokio::fs;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenameArgs {
@@ -38,7 +41,7 @@ impl RenameCommand {
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = Path::new(workspace_path_str);
@@ -60,24 +63,27 @@ impl RenameCommand {
         if !from_path.starts_with(workspace_path) || !to_path.starts_with(workspace_path) {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
-                "Cannot rename files outside workspace"
-            ))).into());
+                "Cannot rename files outside workspace",
+            )))
+            .into());
         }
 
         // Check if source exists
         if !from_path.exists() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Source path does not exist: {}", from_path.display())
-            ))).into());
+                format!("Source path does not exist: {}", from_path.display()),
+            )))
+            .into());
         }
 
         // Check if destination already exists
         if to_path.exists() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                format!("Destination path already exists: {}", to_path.display())
-            ))).into());
+                format!("Destination path already exists: {}", to_path.display()),
+            )))
+            .into());
         }
 
         // Create parent directory of destination if needed
@@ -94,21 +100,25 @@ impl RenameCommand {
                 fs::create_dir_all(parent).await.map_err(|e| {
                     FennecError::Command(Box::new(std::io::Error::new(
                         e.kind(),
-                        format!("Failed to create parent directories: {}", e)
+                        format!("Failed to create parent directories: {}", e),
                     )))
                 })?;
             }
         }
 
         if context.dry_run {
-            return Ok(format!("Would rename: {} -> {}", from_path.display(), to_path.display()));
+            return Ok(format!(
+                "Would rename: {} -> {}",
+                from_path.display(),
+                to_path.display()
+            ));
         }
 
         // Perform the rename
         fs::rename(&from_path, &to_path).await.map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 e.kind(),
-                format!("Failed to rename: {}", e)
+                format!("Failed to rename: {}", e),
             )))
         })?;
 
@@ -123,7 +133,11 @@ impl RenameCommand {
             action_log.record(action).await;
         }
 
-        Ok(format!("Renamed: {} -> {}", from_path.display(), to_path.display()))
+        Ok(format!(
+            "Renamed: {} -> {}",
+            from_path.display(),
+            to_path.display()
+        ))
     }
 }
 
@@ -139,18 +153,22 @@ impl CommandExecutor for RenameCommand {
         &self.descriptor
     }
 
-    async fn preview(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandPreview> {
+    async fn preview(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandPreview> {
         let args: RenameArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid rename arguments: {}", e)
+                format!("Invalid rename arguments: {}", e),
             )))
         })?;
 
         let workspace_path_str = context.workspace_path.as_ref().ok_or_else(|| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "No workspace path set"
+                "No workspace path set",
             )))
         })?;
         let workspace_path = Path::new(workspace_path_str);
@@ -177,11 +195,15 @@ impl CommandExecutor for RenameCommand {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value, context: &CommandContext) -> Result<CommandResult> {
+    async fn execute(
+        &self,
+        args: &serde_json::Value,
+        context: &CommandContext,
+    ) -> Result<CommandResult> {
         let args: RenameArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid rename arguments: {}", e)
+                format!("Invalid rename arguments: {}", e),
             )))
         })?;
 
@@ -205,22 +227,24 @@ impl CommandExecutor for RenameCommand {
         let args: RenameArgs = serde_json::from_value(args.clone()).map_err(|e| {
             FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid rename arguments: {}", e)
+                format!("Invalid rename arguments: {}", e),
             )))
         })?;
 
         if args.from.as_os_str().is_empty() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Source path cannot be empty"
-            ))).into());
+                "Source path cannot be empty",
+            )))
+            .into());
         }
 
         if args.to.as_os_str().is_empty() {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Destination path cannot be empty"
-            ))).into());
+                "Destination path cannot be empty",
+            )))
+            .into());
         }
 
         // Validate no parent directory traversal attempts
@@ -229,8 +253,9 @@ impl CommandExecutor for RenameCommand {
         if from_str.contains("..") || to_str.contains("..") {
             return Err(FennecError::Command(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Path traversal not allowed"
-            ))).into());
+                "Path traversal not allowed",
+            )))
+            .into());
         }
 
         Ok(())
